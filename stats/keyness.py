@@ -8,7 +8,7 @@
   p                  : G² を自由度1のχ²分布で評価した p 値
   log_ratio          : log2( (f_a/N_a) / (f_b/N_b) )（Hardie 2014）。
                        どちらかが 0 のときは両方に 0.5 を足して計算し zero_corrected=True
-  odds_ratio         : (f_a/(N_a−f_a)) / (f_b/(N_b−f_b))。0 の補正は log_ratio と同じ
+  odds_ratio         : (f_a/(N_a−f_a)) / (f_b/(N_b−f_b))。片方が 0 なら算出しない（NaN）
 
 ★ G²（と p 値）は「差があるか」、log ratio は「どれくらい違うか」。判断は log ratio で行う。
 """
@@ -45,9 +45,10 @@ def log_ratio(fa: float, fb: float, na: float, nb: float) -> tuple[float, bool]:
 
 
 def odds_ratio(fa: float, fb: float, na: float, nb: float) -> float:
+    """片方が 0 のときは算出しない（NaN）。0 補正のオッズ比は人工的な値で解釈できないため。"""
     if fa == 0 or fb == 0:
-        fa, fb = fa + 0.5, fb + 0.5
-    return (fa / max(na - fa, 0.5)) / (fb / max(nb - fb, 0.5))
+        return float("nan")
+    return (fa / (na - fa)) / (fb / (nb - fb))
 
 
 def keyness_table(tokens_a: pd.DataFrame, tokens_b: pd.DataFrame, unit: str = "lemma",

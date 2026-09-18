@@ -67,7 +67,8 @@ elif direction == "B に多い語":
 
 shown = view.copy()
 shown["注意"] = shown["flags"].map(lambda f: ("△ 差が小さい " if "EFFECT_SIZE_TOO_SMALL" in f else "") + ("（0 補正）" if "ZERO_CORRECTED" in f else ""))
-shown = shown[["label", "pos", "freq_a", "freq_b", "pmw_a", "pmw_b", "log_ratio", "g2", "p", "注意"]]
+shown["odds"] = [("片方が0回のため算出しません" if z else f"{o:.2f}") for o, z in zip(shown["odds_ratio"], shown["zero_corrected"])]
+shown = shown[["label", "pos", "freq_a", "freq_b", "pmw_a", "pmw_b", "log_ratio", "g2", "p", "odds", "注意"]]
 
 n_small = int(view["flags"].map(lambda f: "EFFECT_SIZE_TOO_SMALL" in f).sum())
 st.markdown(f"**{len(view):,} 語**（足切り前 {len(table):,} 語）。差の大きさ（log ratio）の順に並んでいます。")
@@ -91,7 +92,8 @@ event = st.dataframe(
         "log_ratio": st.column_config.NumberColumn("差の大きさ（log ratio）", format="%+.2f", help=glossary.tooltip("log_ratio")),
         "g2": st.column_config.NumberColumn("偶然でない度合い（G²）", format="%.1f", help=glossary.tooltip("log_likelihood")),
         "p": st.column_config.NumberColumn("p値", format="%.4f", help=glossary.tooltip("p_value")),
-        "注意": st.column_config.Column("注意", help="△ 差が小さい: log ratio の絶対値が目安未満。（0 補正）: 片方の群で 0 回のため 0.5 を足して計算。"),
+        "odds": st.column_config.Column("オッズ比", help=glossary.tooltip("odds_ratio")),
+        "注意": st.column_config.Column("注意", help="△ 差が小さい: log ratio の絶対値が目安未満。（0 補正）: 片方の群で 0 回のため log ratio は 0.5 を足して計算。オッズ比は算出しない。"),
     },
 )
 sel_rows = event.selection.rows if event and event.selection else []

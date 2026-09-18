@@ -1,8 +1,8 @@
 """第2層のフラグ定義と、それぞれに対応する固定文言。
 
 フラグ = 「警告を出すべき状況」の識別子。
-文言はここに固定テキストとして持ち、AI には依存しない。
-第3層（narrator）が使えないときも、この文言をそのまま表示する。
+文言はここに固定テキストとして持つ。第3層（explainer）は、立っているフラグの
+この文言をそのまま【言ってはいけないこと】に並べる。
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
     ),
     "DISPERSION_SKEWED": (
         WARNING,
-        "「{word}」は {freq:,} 回出ていますが、散らばり具合（分散度DP）が {dp:.2f} で、"
+        "『{word}』は {freq:,} 回出ていますが、散らばり具合（分散度DP）が {dp:.2f} で、"
         "一部の文書に集中しています（目安 {threshold} 超）。"
         "この語を「このデータでよく使われる語」と呼ぶのは危険です。"
         "どの文書に集中しているかを必ず確認してください。",
@@ -46,7 +46,7 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
     ),
     "LOW_FREQUENCY": (
         INFO,
-        "「{word}」の出現回数は {freq} 回です。{threshold} 回未満の語について何かを主張するのは避けてください。",
+        "『{word}』の出現回数は {freq} 回です。{threshold} 回未満の語について何かを主張するのは避けてください。",
     ),
     # --- Phase 1 以降 ---
     "GROUP_IMBALANCE": (
@@ -59,6 +59,11 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
         "MIスコアは高い（{mi:.1f}）ですが、一緒に出た回数が {cooccur} 回しかありません。"
         "回数が {threshold} 回未満の組み合わせは、用例を全て自分の目で確認してから扱ってください。",
     ),
+    "BOTH_HIGH_FREQUENCY": (
+        WARNING,
+        "どちらも非常によく使われる語どうしの組み合わせです（中心語 {freq_node:,} 回、共起語 {freq_collocate:,} 回。"
+        "いずれも頻度上位 {top_percent:g}% 以内）。logDice が高くても、特別な結びつきとは言えません。",
+    ),
     "T_ONLY_FUNCTION_WORD": (
         WARNING,
         "Tスコアは高い（{t:.1f}）のにMIスコアは低い（{mi:.1f}）組み合わせです。"
@@ -66,16 +71,16 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
     ),
     "FUNCTION_WORD_NOISE": (
         INFO,
-        "「{word}」は機能語です。機能語を除外する設定になっているため、この行はノイズとして読み飛ばしてください。",
+        "『{word}』は機能語です。機能語を除外する設定になっているため、この行はノイズとして読み飛ばしてください。",
     ),
     "ZERO_CORRECTED": (
         INFO,
-        "「{word}」は片方のグループで出現回数が 0 です。差の大きさ（log ratio）とオッズ比は、両方に 0.5 を足した補正値で計算しています。"
-        "値そのものより「一方のグループにしか出ない」という事実として扱ってください。",
+        "『{word}』は片方のグループで出現回数が 0 です。差の大きさ（log ratio）は 0 回の側に 0.5 を足した補正値で、"
+        "オッズ比は算出していません。値そのものより「一方のグループにしか出ない」という事実として扱ってください。",
     ),
     "EFFECT_SIZE_TOO_SMALL": (
         WARNING,
-        "「{word}」の差の大きさ（log ratio）は {log_ratio:+.2f} で、絶対値が {threshold} 未満です。"
+        "『{word}』の差の大きさ（log ratio）は {log_ratio:+.2f} で、絶対値が {threshold} 未満です。"
         "p値が小さくても、実質的な差としては小さすぎます。発見として扱わないでください。",
     ),
 }

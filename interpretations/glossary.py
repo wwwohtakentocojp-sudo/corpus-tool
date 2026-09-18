@@ -37,11 +37,23 @@ def label(key: str) -> str:
     return str(entry(key).get("label", key))
 
 
+def join_lines(text: str) -> str:
+    """YAML の複数行文字列を1行にする。日本語なので改行は空白を入れずに連結する。
+    段落の区切り（空行）は残す。"""
+    paras = str(text).strip().split("\n\n")
+    return "\n\n".join("".join(line.strip() for line in p.splitlines()) for p in paras)
+
+
+def caution_head(key: str) -> str:
+    """caution の最初の段落を1行で。"""
+    return join_lines(entry(key).get("caution", "")).split("\n\n")[0]
+
+
 def tooltip(key: str) -> str:
     """"?" アイコン（help=）用の短い説明。what と caution の先頭部分。"""
     e = entry(key)
-    what = str(e.get("what", "")).strip()
-    caution = str(e.get("caution", "")).strip()
+    what = join_lines(e.get("what", ""))
+    caution = join_lines(e.get("caution", ""))
     text = what
     if caution:
         text += "\n\n注意: " + caution
@@ -51,17 +63,9 @@ def tooltip(key: str) -> str:
 def full_text(key: str) -> str:
     """展開表示用: label / what / high / low / caution / range / example を Markdown で。"""
     e = entry(key)
-    parts = [f"**{e.get('label', key)}**", ""]
-    if e.get("what"):
-        parts += ["**何を測っているか**", str(e["what"]).strip(), ""]
-    if e.get("high"):
-        parts += ["**値が高いとき**", str(e["high"]).strip(), ""]
-    if e.get("low"):
-        parts += ["**値が低いとき**", str(e["low"]).strip(), ""]
-    if e.get("caution"):
-        parts += ["**注意（必ず読んでください）**", str(e["caution"]).strip(), ""]
-    if e.get("range"):
-        parts += ["**値の範囲と目安**", str(e["range"]).strip(), ""]
-    if e.get("example"):
-        parts += ["**例**", str(e["example"]).strip(), ""]
-    return "\n\n".join(p for p in parts if p != "" or True).replace("\n\n\n\n", "\n\n")
+    parts = [f"**{e.get('label', key)}**"]
+    for field, title in (("what", "何を測っているか"), ("high", "値が高いとき"), ("low", "値が低いとき"),
+                         ("caution", "注意（必ず読んでください）"), ("range", "値の範囲と目安"), ("example", "例")):
+        if e.get(field):
+            parts += [f"**{title}**", join_lines(e[field])]
+    return "\n\n".join(parts)

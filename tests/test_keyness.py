@@ -30,6 +30,8 @@ def test_log_likelihood_keyness_hand_computed():
 
 def test_odds_ratio():
     assert odds_ratio(10, 5, 1000, 2000) == pytest.approx((10 / 990) / (5 / 1995))
+    # 片方が 0 なら算出しない
+    assert math.isnan(odds_ratio(10, 0, 1000, 2000))
 
 
 def test_keyness_table_and_direction():
@@ -41,6 +43,7 @@ def test_keyness_table_and_direction():
     assert df.loc["x", "direction"] == "A"
     assert df.loc["y", "log_ratio"] == pytest.approx(0.0) and df.loc["y", "direction"] == "="
     assert df.loc["w", "direction"] == "B" and bool(df.loc["w", "zero_corrected"]) is True
+    assert math.isnan(df.loc["w", "odds_ratio"])
     assert df.loc["x", "pmw_a"] == pytest.approx(100000.0)
     # 並びは log_ratio 降順
     assert df["log_ratio"].is_monotonic_decreasing

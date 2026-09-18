@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import pandas as pd
@@ -66,16 +67,32 @@ def check_low_frequency(word: str, freq: int, thresholds: dict[str, Any]) -> lis
     return []
 
 
+def high_frequency_cutoff(freqs, thresholds: dict[str, Any]) -> int:
+    """異なり語の頻度上位 high_freq_top_ratio（既定 1%）に入るための最低出現回数。
+    freqs: 各異なり語の出現回数（順不同でよい）。語が無ければ十分大きな値を返す（誰も該当しない）。"""
+    vals = sorted((int(v) for v in freqs), reverse=True)
+    if not vals:
+        return 2**31
+    k = max(1, math.ceil(len(vals) * float(thresholds["high_freq_top_ratio"])))
+    return vals[k - 1]
+
+
 def check_collocation_row(mi: float, t: float, cooccur: int, is_function: bool, include_function_words: bool,
-                          thresholds: dict[str, Any]) -> list[Flag]:
+                          thresholds: dict[str, Any], freq_node: int | None = None, freq_collocate: int | None = None,
+                          high_freq_cutoff: int | None = None) -> list[Flag]:
     """コロケーション表の1行に対するフラグ。
       MI_HIGH_LOW_FREQ     : mi > mi_high かつ cooccur < mi_min_cooccur
+      BOTH_HIGH_FREQUENCY  : freq_node >= cutoff かつ freq_collocate >= cutoff（双方が頻度上位）
       T_ONLY_FUNCTION_WORD : t > t_high かつ mi < mi_low
       FUNCTION_WORD_NOISE  : 機能語 かつ 機能語を含めない設定
     """
     flags: list[Flag] = []
     if not pd.isna(mi) and mi > float(thresholds["mi_high"]) and cooccur < int(thresholds["mi_min_cooccur"]):
         flags.append(make_flag("MI_HIGH_LOW_FREQ", mi=float(mi), cooccur=int(cooccur), threshold=int(thresholds["mi_min_cooccur"])))
+    if high_freq_cutoff is not None and freq_node is not None and freq_collocate is not None:
+        if freq_node >= high_freq_cutoff and freq_collocate >= high_freq_cutoff:
+            flags.append(make_flag("BOTH_HIGH_FREQUENCY", freq_node=int(freq_node), freq_collocate=int(freq_collocate),
+                                   top_percent=float(thresholds["high_freq_top_ratio"]) * 100))
     if not pd.isna(t) and not pd.isna(mi) and t > float(thresholds["t_high"]) and mi < float(thresholds["mi_low"]):
         flags.append(make_flag("T_ONLY_FUNCTION_WORD", t=float(t), mi=float(mi)))
     if is_function and not include_function_words:
@@ -83,10 +100,12 @@ def check_collocation_row(mi: float, t: float, cooccur: int, is_function: bool, 
     return flags
 
 
-def flag_collocation_table(df: pd.DataFrame, thresholds: dict[str, Any], include_function_words: bool) -> pd.DataFrame:
+def flag_collocation_table(df: pd.DataFrame, thresholds: dict[str, Any], include_function_words: bool,
+                           high_freq_cutoff: int | None = None) -> pd.DataFrame:
     out = df.copy()
     out["flags"] = [
-        [f.code for f in check_collocation_row(r.mi, r.t, int(r.cooccur), bool(r.is_function), include_function_words, thresholds)]
+        [f.code for f in check_collocation_row(r.mi, r.t, int(r.cooccur), bool(r.is_function), include_function_words, thresholds,
+                                               int(r.freq_node), int(r.freq_collocate), high_freq_cutoff)]
         for r in out.itertuples()
     ]
     return out

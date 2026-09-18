@@ -9,7 +9,7 @@ from analyzers.registry import get_analyzer
 from app_config import thresholds
 from interpretations import glossary
 from interpretations.flags import make_flag
-from interpretations.rules import flag_collocation_table
+from interpretations.rules import flag_collocation_table, high_frequency_cutoff
 from stats.collocation import DEFAULT_METHOD, METHOD_REASON, METHODS, collocation_table
 from stats.network import build_network, network_html
 from ui import state
@@ -59,9 +59,10 @@ if method == "dependency" and not analyzer.supports_dependency():
     st.stop()
 
 unit = "lemma" if unit_label == "見出し語" else "surface"
+hf_cutoff = state.cached(("hf_cutoff", unit), lambda: high_frequency_cutoff(corpus.tokens[unit].value_counts().to_numpy(), th))
 table = state.cached(
-    ("colloc", node, unit, method, window, min_cooccur),
-    lambda: flag_collocation_table(collocation_table(corpus.tokens, node, unit, method, window, min_cooccur), th, s.include_function_words),
+    ("colloc", node, unit, method, window, min_cooccur, s.include_function_words),
+    lambda: flag_collocation_table(collocation_table(corpus.tokens, node, unit, method, window, min_cooccur), th, s.include_function_words, hf_cutoff),
 )
 if table.empty:
     st.warning(f"「{node}」の共起語が見つかりませんでした。見出し語で探す場合は辞書形で入力してください。")
@@ -79,6 +80,8 @@ def _flag_label(flags: list[str]) -> str:
     marks = []
     if "MI_HIGH_LOW_FREQ" in flags:
         marks.append("⚠ 低頻度・要用例")
+    if "BOTH_HIGH_FREQUENCY" in flags:
+        marks.append("△ 双方が高頻度")
     if "T_ONLY_FUNCTION_WORD" in flags:
         marks.append("△ 高頻度語")
     if "FUNCTION_WORD_NOISE" in flags:
@@ -108,7 +111,7 @@ event = st.dataframe(
         "mi": st.column_config.NumberColumn("珍しさ重視（MI）", format="%.2f", help=glossary.tooltip("mi_score")),
         "t": st.column_config.NumberColumn("安定性（Tスコア）", format="%.2f", help=glossary.tooltip("t_score")),
         "g2": st.column_config.NumberColumn("偶然でない度合い（G²）", format="%.1f", help=glossary.tooltip("log_likelihood")),
-        "注意": st.column_config.Column("注意", help="⚠ 低頻度・要用例: MIが高いが回数が少ない。△ 高頻度語: どこにでも出る語による見かけの共起。"),
+        "注意": st.column_config.Column("注意", help="⚠ 低頻度・要用例: MIが高いが回数が少ない。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語: どこにでも出る語による見かけの共起。"),
     },
 )
 
@@ -157,11 +160,16 @@ else:
     if len(need_check) > 10:
         st.caption(f"上位10組のみ表示。残り {len(need_check) - 10} 組は表の「注意」列で確認できます。")
 
-noise = view[view["flags"].map(lambda f: "T_ONLY_FUNCTION_WORD" in f)]
+noise = view[view["flags"].map(lambda f: "T_ONLY_FUNCTION_WORD" in f or "BOTH_HIGH_FREQUENCY" in f)]
 if len(noise):
-    with st.expander(f"どこにでも出る語による見かけの共起（{len(noise)} 語）"):
-        st.markdown("結びつきの安定性（Tスコア）は高いのに、珍しさ重視（MIスコア）は低い組み合わせです。単にその語がどこにでも出るというだけで、発見ではありません。")
-        st.dataframe(noise[["label", "pos", "cooccur", "t", "mi"]].rename(columns={"label": "共起語", "pos": "品詞", "cooccur": "共起頻度", "t": "Tスコア", "mi": "MI"}), width="stretch", hide_index=True)
+    with st.expander(f"よく使われる語による見かけの共起（{len(noise)} 語）"):
+        st.markdown(
+            "どちらも非常によく使われる語どうし（△ 双方が高頻度）、または結びつきの安定性（Tスコア）は高いのに珍しさ重視（MIスコア）は低い組み合わせ（△ 高頻度語）です。"
+            " 単にその語がどこにでも出るというだけで、logDice が高くても発見ではありません。"
+        )
+        nz = noise.copy()
+        nz["注意"] = nz["flags"].map(_flag_label)
+        st.dataframe(nz[["label", "pos", "cooccur", "freq_collocate", "log_dice", "t", "mi", "注意"]].rename(columns={"label": "共起語", "pos": "品詞", "cooccur": "共起頻度", "freq_collocate": "共起語の総出現回数", "log_dice": "logDice", "t": "Tスコア", "mi": "MI"}), width="stretch", hide_index=True)
 
 # --- 共起ネットワーク --------------------------------------------------------------
 st.markdown("### 共起ネットワーク")

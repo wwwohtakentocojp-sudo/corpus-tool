@@ -12,7 +12,6 @@ dependencies = [
     # 図は plotly。PNG 書き出しは plotly のカメラアイコン（ブラウザ側）に任せ、
     # サーバー側の画像生成は持たない（表示と書き出しの二重実装を避ける）
     "plotly>=5.24",
-    "python-dotenv>=1.0",
     "chardet>=5.2",
     # 日本語形態素解析
     "fugashi>=1.4",
@@ -29,8 +28,6 @@ dependencies = [
     # 共起ネットワーク
     "networkx>=3.2",
     "pyvis>=0.3.2",
-    # 解説文の生成（第3層）。キー未設定でも全機能が動く
-    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
