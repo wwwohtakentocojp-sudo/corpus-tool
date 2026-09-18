@@ -1,0 +1,17 @@
+# Streamlit の設定
+# ★ 利用統計の外部送信を無効化する（本ツールは一切の外部送信を行わない方針のため）
+[browser]
+gatherUsageStats = false
+
+[server]
+address = "localhost"
+headless = false
+maxUploadSize = 1024
+runOnSave = false
+
+[client]
+# 右上の「Deploy」ボタンなど、利用者に不要な項目を隠す
+toolbarMode = "minimal"
+
+[theme]
+base = "light"

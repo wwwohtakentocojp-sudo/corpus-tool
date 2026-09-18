@@ -1,0 +1,29 @@
+[project]
+name = "corpus-tool"
+version = "0.0.1"
+description = "統計リテラシー不要のコーパス分析ツール（言語学者向け）"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "streamlit>=1.40",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "scipy>=1.13",
+    "pyyaml>=6.0",
+    # 図は plotly。PNG 書き出しは plotly のカメラアイコン（ブラウザ側）に任せ、
+    # サーバー側の画像生成は持たない（表示と書き出しの二重実装を避ける）
+    "plotly>=5.24",
+    "python-dotenv>=1.0",
+    "chardet>=5.2",
+    # 日本語形態素解析
+    "fugashi>=1.4",
+    "unidic-lite>=1.0.8",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
