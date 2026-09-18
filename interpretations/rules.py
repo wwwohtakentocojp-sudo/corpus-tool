@@ -66,6 +66,55 @@ def check_low_frequency(word: str, freq: int, thresholds: dict[str, Any]) -> lis
     return []
 
 
+def check_collocation_row(mi: float, t: float, cooccur: int, is_function: bool, include_function_words: bool,
+                          thresholds: dict[str, Any]) -> list[Flag]:
+    """コロケーション表の1行に対するフラグ。
+      MI_HIGH_LOW_FREQ     : mi > mi_high かつ cooccur < mi_min_cooccur
+      T_ONLY_FUNCTION_WORD : t > t_high かつ mi < mi_low
+      FUNCTION_WORD_NOISE  : 機能語 かつ 機能語を含めない設定
+    """
+    flags: list[Flag] = []
+    if not pd.isna(mi) and mi > float(thresholds["mi_high"]) and cooccur < int(thresholds["mi_min_cooccur"]):
+        flags.append(make_flag("MI_HIGH_LOW_FREQ", mi=float(mi), cooccur=int(cooccur), threshold=int(thresholds["mi_min_cooccur"])))
+    if not pd.isna(t) and not pd.isna(mi) and t > float(thresholds["t_high"]) and mi < float(thresholds["mi_low"]):
+        flags.append(make_flag("T_ONLY_FUNCTION_WORD", t=float(t), mi=float(mi)))
+    if is_function and not include_function_words:
+        flags.append(make_flag("FUNCTION_WORD_NOISE", word=""))
+    return flags
+
+
+def flag_collocation_table(df: pd.DataFrame, thresholds: dict[str, Any], include_function_words: bool) -> pd.DataFrame:
+    out = df.copy()
+    out["flags"] = [
+        [f.code for f in check_collocation_row(r.mi, r.t, int(r.cooccur), bool(r.is_function), include_function_words, thresholds)]
+        for r in out.itertuples()
+    ]
+    return out
+
+
+def check_keyness_row(log_ratio: float, thresholds: dict[str, Any], word: str = "",
+                      zero_corrected: bool = False) -> list[Flag]:
+    """EFFECT_SIZE_TOO_SMALL: |log_ratio| < log_ratio_min
+       ZERO_CORRECTED     : 片方の群で 0 回（0.5 補正値）"""
+    flags: list[Flag] = []
+    th = float(thresholds["log_ratio_min"])
+    if not pd.isna(log_ratio) and abs(log_ratio) < th:
+        flags.append(make_flag("EFFECT_SIZE_TOO_SMALL", word=word, log_ratio=float(log_ratio), threshold=th))
+    if zero_corrected:
+        flags.append(make_flag("ZERO_CORRECTED", word=word))
+    return flags
+
+
+def flag_keyness_table(df: pd.DataFrame, thresholds: dict[str, Any]) -> pd.DataFrame:
+    out = df.copy()
+    zc = out["zero_corrected"] if "zero_corrected" in out.columns else pd.Series(False, index=out.index)
+    out["flags"] = [
+        [f.code for f in check_keyness_row(r.log_ratio, thresholds, str(r.word), bool(z))]
+        for r, z in zip(out.itertuples(), zc.tolist())
+    ]
+    return out
+
+
 def flag_frequency_table(freq_df: pd.DataFrame, thresholds: dict[str, Any], n_parts: int | None = None) -> pd.DataFrame:
     """頻度表（word, freq, dp 列を持つ）に、フラグ列 (list[str]) を付けて返す。
 

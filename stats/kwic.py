@@ -56,15 +56,46 @@ def matched_keys(tokens: pd.DataFrame, hits: np.ndarray, unit: str = "lemma") ->
     return tokens.iloc[hits][unit].value_counts()
 
 
+def filter_hits_by_collocate(tokens: pd.DataFrame, hits: np.ndarray, collocate: str, unit: str = "lemma",
+                             scope: str = "sentence", window: int = 5) -> np.ndarray:
+    """共起語 collocate が近く（同一文内 / 前後 window 語）にある中心語の出現だけに絞る。"""
+    if len(hits) == 0:
+        return hits
+    col_mask = _match(tokens[unit].to_numpy(dtype=object), collocate, False, True)
+    if unit == "lemma" and "lemma_label" in tokens.columns:
+        col_mask = col_mask | _match(tokens["lemma_label"].to_numpy(dtype=object), collocate, False, True)
+    col_idx = np.flatnonzero(col_mask)
+    if len(col_idx) == 0:
+        return hits[:0]
+    if scope == "sentence":
+        keys = (tokens["doc_id"].to_numpy(dtype=np.int64) << 32) + tokens["sentence_id"].to_numpy(dtype=np.int64)
+        col_keys = set(keys[col_idx].tolist())
+        return np.array([h for h in hits if keys[h] in col_keys and np.any((col_idx != h) & (keys[col_idx] == keys[h]))], dtype=int)
+    doc_ids = tokens["doc_id"].to_numpy()
+    keep = []
+    col_set = set(col_idx.tolist())
+    for h in hits:
+        for k in range(-window, window + 1):
+            j = h + k
+            if k != 0 and 0 <= j < len(tokens) and doc_ids[j] == doc_ids[h] and j in col_set:
+                keep.append(h)
+                break
+    return np.array(keep, dtype=int)
+
+
 def kwic(tokens: pd.DataFrame, query: str, unit: str = "lemma", window: int = 5,
-         regex: bool = False, case_sensitive: bool = True, display: str = "surface") -> pd.DataFrame:
+         regex: bool = False, case_sensitive: bool = True, display: str = "surface",
+         collocate: str | None = None, collocate_scope: str = "sentence") -> pd.DataFrame:
     """KWIC 表を返す。
 
     列: doc_id, position, sentence_id, key, L{window}..L1, KWIC, R1..R{window}, left, right
     key はヒットした語の集計キー（unit 列の値）。left/right は前後文脈を空白で連結した文字列。
+    collocate を指定すると、その語が近く（collocate_scope: "sentence" / "fixed"）にある用例だけに絞る。
     """
     tokens = tokens.reset_index(drop=True)
     hits = find_hits(tokens, query, unit=unit, regex=regex, case_sensitive=case_sensitive)
+    if collocate:
+        hits = filter_hits_by_collocate(tokens, hits, collocate, unit=unit, scope=collocate_scope, window=window)
     cols_l = [f"L{i}" for i in range(window, 0, -1)]
     cols_r = [f"R{i}" for i in range(1, window + 1)]
     base_cols = ["doc_id", "position", "sentence_id", "key"] + cols_l + ["KWIC"] + cols_r + ["left", "right"]

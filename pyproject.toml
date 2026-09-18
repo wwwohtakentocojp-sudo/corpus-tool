@@ -26,6 +26,11 @@ dependencies = [
     "compound-split>=1.0",
     # CSV / Excel 読み込み
     "openpyxl>=3.1",
+    # 共起ネットワーク
+    "networkx>=3.2",
+    "pyvis>=0.3.2",
+    # 解説文の生成（第3層）。キー未設定でも全機能が動く
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]

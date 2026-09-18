@@ -53,6 +53,24 @@ def test_kwic_matches_label_and_reports_key():
     assert len(kwic(toks, "ライト-light（光）", unit="lemma", window=1)) == 1
 
 
+def test_kwic_collocate_filter():
+    from corpus.models import Token, tokens_to_frame
+
+    toks = [
+        Token("先生", "先生", "名詞", 0, 0, 0), Token("は", "は", "助詞", 0, 1, 0), Token("言う", "言う", "動詞", 0, 2, 0),
+        Token("先生", "先生", "名詞", 0, 3, 1), Token("の", "の", "助詞", 0, 4, 1), Token("家", "家", "名詞", 0, 5, 1),
+        Token("先生", "先生", "名詞", 1, 0, 0), Token("を", "を", "助詞", 1, 1, 0), Token("家", "家", "名詞", 1, 2, 0),
+    ]
+    t = tokens_to_frame(toks)
+    assert len(kwic(t, "先生", window=2)) == 3
+    by_sent = kwic(t, "先生", window=2, collocate="家", collocate_scope="sentence")
+    assert by_sent["position"].tolist() == [3, 0] and by_sent["doc_id"].tolist() == [0, 1]
+    by_win = kwic(t, "先生", window=1, collocate="家", collocate_scope="fixed")
+    assert len(by_win) == 0  # 1語以内には無い
+    by_win2 = kwic(t, "先生", window=2, collocate="家", collocate_scope="fixed")
+    assert len(by_win2) == 2
+
+
 def test_find_hits_case():
     toks = make_tokens([["Essen", "essen"]])
     assert find_hits(toks, "Essen", unit="lemma", case_sensitive=True).tolist() == [0]

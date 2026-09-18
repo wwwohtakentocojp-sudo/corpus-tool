@@ -11,6 +11,8 @@ pages = [
     st.Page("views/p3_basic_stats.py", title="3. 基本統計", icon="📊"),
     st.Page("views/p4_frequency.py", title="4. 頻度分析", icon="🔢"),
     st.Page("views/p5_kwic.py", title="5. 用例検索（KWIC）", icon="🔍"),
+    st.Page("views/p6_collocation.py", title="6. コロケーション", icon="🔗"),
+    st.Page("views/p7_keyness.py", title="7. 特徴語（2群比較）", icon="⚖️"),
 ]
 
 nav = st.navigation(pages)

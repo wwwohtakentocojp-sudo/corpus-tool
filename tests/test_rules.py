@@ -7,10 +7,59 @@ from interpretations.rules import (
     check_corpus_size,
     check_dispersion,
     check_dp_reliability,
+    check_collocation_row,
     check_group_imbalance,
+    check_keyness_row,
     check_low_frequency,
+    flag_collocation_table,
     flag_frequency_table,
+    flag_keyness_table,
 )
+
+
+# --- MI_HIGH_LOW_FREQ ------------------------------------------------------------
+@pytest.mark.parametrize(
+    "mi, cooccur, expected",
+    [(5.0, 19, False), (5.01, 19, True), (5.01, 20, False), (9.8, 12, True), (float("nan"), 3, False)],
+)
+def test_mi_high_low_freq_boundary(mi, cooccur, expected):
+    flags = check_collocation_row(mi, 0.0, cooccur, False, True, TH)
+    assert ("MI_HIGH_LOW_FREQ" in codes(flags)) is expected
+
+
+# --- T_ONLY_FUNCTION_WORD -------------------------------------------------------
+@pytest.mark.parametrize(
+    "t, mi, expected",
+    [(2.0, 2.9, False), (2.01, 2.9, True), (2.01, 3.0, False), (12.1, 0.5, True)],
+)
+def test_t_only_function_word_boundary(t, mi, expected):
+    flags = check_collocation_row(mi, t, 100, False, True, TH)
+    assert ("T_ONLY_FUNCTION_WORD" in codes(flags)) is expected
+
+
+# --- FUNCTION_WORD_NOISE --------------------------------------------------------
+@pytest.mark.parametrize(
+    "is_function, include_fw, expected",
+    [(True, False, True), (True, True, False), (False, False, False)],
+)
+def test_function_word_noise(is_function, include_fw, expected):
+    flags = check_collocation_row(1.0, 1.0, 10, is_function, include_fw, TH)
+    assert ("FUNCTION_WORD_NOISE" in codes(flags)) is expected
+
+
+# --- EFFECT_SIZE_TOO_SMALL -------------------------------------------------------
+@pytest.mark.parametrize("lr, expected", [(0.99, True), (1.0, False), (-0.99, True), (-1.0, False), (3.2, False)])
+def test_effect_size_boundary(lr, expected):
+    assert ("EFFECT_SIZE_TOO_SMALL" in codes(check_keyness_row(lr, TH, "w"))) is expected
+
+
+def test_vectorized_collocation_and_keyness_flags_match_scalar():
+    col = pd.DataFrame({"mi": [6.0, 1.0], "t": [1.0, 5.0], "cooccur": [3, 50], "is_function": [False, True]})
+    out = flag_collocation_table(col, TH, include_function_words=False)
+    assert out["flags"].tolist() == [["MI_HIGH_LOW_FREQ"], ["T_ONLY_FUNCTION_WORD", "FUNCTION_WORD_NOISE"]]
+    key = pd.DataFrame({"word": ["a", "b", "c"], "log_ratio": [0.5, 2.0, 6.0], "zero_corrected": [False, False, True]})
+    assert flag_keyness_table(key, TH)["flags"].tolist() == [["EFFECT_SIZE_TOO_SMALL"], [], ["ZERO_CORRECTED"]]
+    assert "0.5" in check_keyness_row(6.0, TH, "c", zero_corrected=True)[0].message
 
 
 # --- GROUP_IMBALANCE ------------------------------------------------------------
@@ -31,7 +80,8 @@ def test_group_imbalance_boundary(sizes, expected):
         assert "倍" in flags[0].message
 
 TH = {"corpus_min_tokens": 10000, "dp_skew": 0.5, "dp_min_freq": 10, "dp_min_parts": 10, "low_freq": 5,
-      "group_imbalance_ratio": 3.0}
+      "group_imbalance_ratio": 3.0, "mi_high": 5.0, "mi_min_cooccur": 20, "t_high": 2.0, "mi_low": 3.0,
+      "log_ratio_min": 1.0}
 
 
 def codes(flags):

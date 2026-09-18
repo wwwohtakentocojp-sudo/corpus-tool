@@ -68,6 +68,11 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
         INFO,
         "「{word}」は機能語です。機能語を除外する設定になっているため、この行はノイズとして読み飛ばしてください。",
     ),
+    "ZERO_CORRECTED": (
+        INFO,
+        "「{word}」は片方のグループで出現回数が 0 です。差の大きさ（log ratio）とオッズ比は、両方に 0.5 を足した補正値で計算しています。"
+        "値そのものより「一方のグループにしか出ない」という事実として扱ってください。",
+    ),
     "EFFECT_SIZE_TOO_SMALL": (
         WARNING,
         "「{word}」の差の大きさ（log ratio）は {log_ratio:+.2f} で、絶対値が {threshold} 未満です。"
