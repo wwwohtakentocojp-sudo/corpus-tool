@@ -79,14 +79,17 @@ def high_frequency_cutoff(freqs, thresholds: dict[str, Any]) -> int:
 
 def check_collocation_row(mi: float, t: float, cooccur: int, is_function: bool, include_function_words: bool,
                           thresholds: dict[str, Any], freq_node: int | None = None, freq_collocate: int | None = None,
-                          high_freq_cutoff: int | None = None) -> list[Flag]:
+                          high_freq_cutoff: int | None = None, g2: float | None = None) -> list[Flag]:
     """コロケーション表の1行に対するフラグ。
       MI_HIGH_LOW_FREQ     : mi > mi_high かつ cooccur < mi_min_cooccur
       BOTH_HIGH_FREQUENCY  : freq_node >= cutoff かつ freq_collocate >= cutoff（双方が頻度上位）
+      NOT_DISTINGUISHABLE  : g2 < g2_significant（偶然かどうかを区別できない。「結びつきがない」ではない）
       T_ONLY_FUNCTION_WORD : t > t_high かつ mi < mi_low
       FUNCTION_WORD_NOISE  : 機能語 かつ 機能語を含めない設定
     """
     flags: list[Flag] = []
+    if g2 is not None and not pd.isna(g2) and g2 < float(thresholds["g2_significant"]):
+        flags.append(make_flag("NOT_DISTINGUISHABLE", g2=float(g2), threshold=float(thresholds["g2_significant"])))
     if not pd.isna(mi) and mi > float(thresholds["mi_high"]) and cooccur < int(thresholds["mi_min_cooccur"]):
         flags.append(make_flag("MI_HIGH_LOW_FREQ", mi=float(mi), cooccur=int(cooccur), threshold=int(thresholds["mi_min_cooccur"])))
     if high_freq_cutoff is not None and freq_node is not None and freq_collocate is not None:
@@ -105,7 +108,7 @@ def flag_collocation_table(df: pd.DataFrame, thresholds: dict[str, Any], include
     out = df.copy()
     out["flags"] = [
         [f.code for f in check_collocation_row(r.mi, r.t, int(r.cooccur), bool(r.is_function), include_function_words, thresholds,
-                                               int(r.freq_node), int(r.freq_collocate), high_freq_cutoff)]
+                                               int(r.freq_node), int(r.freq_collocate), high_freq_cutoff, float(r.g2))]
         for r in out.itertuples()
     ]
     return out

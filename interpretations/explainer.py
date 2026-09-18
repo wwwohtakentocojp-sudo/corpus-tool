@@ -83,6 +83,7 @@ JUDGMENTS: dict[str, str] = {
     "BOTH_HIGH_FREQUENCY": "『{WORD}』と『{COLLOCATE}』はどちらも非常によく使われる語です。結びつきの強さ・総合（logDice）が {log_dice} と高いのは両方がよく出る語だからで、特別な結びつきとは言えません。",
     "T_ONLY_FUNCTION_WORD": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、珍しさ重視の結びつき（MIスコア）は {mi} と低く、『{COLLOCATE}』がどこにでも出る語であるために並んでいるだけです。",
     "MI_HIGH_LOW_FREQ": "『{WORD}』と『{COLLOCATE}』は珍しさ重視の結びつき（MIスコア）が {mi} と高い一方、一緒に出た回数は {cooccur} 回だけです。傾向と呼ぶには回数が足りません。",
+    "NOT_DISTINGUISHABLE": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、偶然では説明しにくい度合い（G²）は {g2} で目安の {threshold} に達しておらず、偶然そうなったのかどうかを今のデータでは区別できません。",
     "FUNCTION_WORD_NOISE": "『{COLLOCATE}』は機能語（助詞・冠詞など）で、内容の分析では読み飛ばす行です。",
     "DP_TOO_FEW_PARTS": "『{WORD}』は {freq} 回出現しています。文書数が {n_parts} と少ないため、散らばり具合（分散度DP）= {dp} は参考値にとどまります。",
     "DISPERSION_SKEWED": "『{WORD}』は {freq} 回出現していますが、散らばり具合（分散度DP）が {dp} で、一部の文書に集中しています。",
@@ -96,6 +97,7 @@ JUDGMENTS: dict[str, str] = {
 # フラグ → 次に確認すべきこと
 NEXT_STEPS: dict[str, str] = {
     "MI_HIGH_LOW_FREQ": "『{WORD}』と『{COLLOCATE}』の用例を、KWIC 画面で全件（{cooccur} 件）確認してください。",
+    "NOT_DISTINGUISHABLE": "この組み合わせについては結論を出さず、データを増やすか、別の組み合わせを検討してください。",
     "BOTH_HIGH_FREQUENCY": "この組み合わせは発見として扱わず、logDice が高く、かつ共起語の出現回数が際立って多くはない組み合わせを探してください。",
     "T_ONLY_FUNCTION_WORD": "『{COLLOCATE}』が機能語なら、集計設定で機能語を除外してください。内容語なら、この行は読み飛ばしてください。",
     "FUNCTION_WORD_NOISE": "文体・文法の研究で機能語を対象にする場合だけ「機能語を含める」を ON にしてください。",
@@ -110,8 +112,32 @@ NEXT_STEPS: dict[str, str] = {
 
 # 判定文を出す順（重要なものを先に）
 _ORDER = ["CORPUS_TOO_SMALL", "GROUP_IMBALANCE", "BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "MI_HIGH_LOW_FREQ",
-          "FUNCTION_WORD_NOISE", "DP_TOO_FEW_PARTS", "DISPERSION_SKEWED", "LOW_FREQUENCY", "ZERO_CORRECTED",
-          "EFFECT_SIZE_TOO_SMALL"]
+          "NOT_DISTINGUISHABLE", "FUNCTION_WORD_NOISE", "DP_TOO_FEW_PARTS", "DISPERSION_SKEWED", "LOW_FREQUENCY",
+          "ZERO_CORRECTED", "EFFECT_SIZE_TOO_SMALL"]
+
+# 「よく使われる語どうし」の趣旨を既に述べるフラグ。これらがあれば食い違いの文は重複するので出さない
+_ALREADY_EXPLAINS_DISAGREEMENT = {"BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD"}
+
+
+def _disagreement_sentence(inp: ExplainInput, th: dict[str, Any]) -> str | None:
+    """指標の示す方向が食い違うとき（logDice は目安以上なのに MI または G² が目安未満）、
+    食い違っていること自体を先に述べる。該当しなければ None。"""
+    if inp.screen != "collocation":
+        return None
+    m, w = inp.metrics, inp.words
+    ld, mi, g2 = m.get("log_dice"), m.get("mi"), m.get("g2")
+    if ld is None or ld != ld or ld < float(th.get("log_dice_strong", 7.0)):
+        return None
+    mi_low = mi is not None and mi == mi and mi < float(th.get("mi_meaningful", 3.0))
+    g2_low = g2 is not None and g2 == g2 and g2 < float(th.get("g2_significant", 6.63))
+    if not (mi_low or g2_low):
+        return None
+    head = f"『{w.get('WORD')}』と『{w.get('COLLOCATE')}』は、指標によって評価が分かれます。総合的な強さ（logDice = {fmt('log_dice', ld)}）は高い一方、"
+    if mi_low:
+        return head + (f"珍しさ（MI = {fmt('mi', mi)}）は偶然に近い水準です。"
+                       "これは『よく使われる語どうしなので自然と一緒に出る』という状態で、特別な結びつきとは言えません。")
+    return head + (f"偶然では説明しにくい度合い（G² = {fmt('g2', g2)}）は目安に達していません。"
+                   "回数が少なく、偶然そうなったのかどうかを区別できない状態です。")
 
 
 def _sorted_flags(flags: list[Flag]) -> list[Flag]:
@@ -137,8 +163,8 @@ def _level_sentence(inp: ExplainInput, th: dict[str, Any]) -> str:
         if mi is not None and mi == mi:
             parts.append(f"珍しさ重視（MIスコア）は {fmt('mi', mi)} で{'結びつきありの水準' if mi >= mi_ok else '偶然に近い水準'}")
         if g2 is not None and g2 == g2:
-            parts.append(f"偶然では説明しにくい度合い（G²）は {fmt('g2', g2)} で{'偶然では説明しにくい水準' if g2 >= g2_ok else f'目安の {g2_ok:g} に達していません'}")
-        return head + ("、" + "、".join(parts) if parts else "") + "。"
+            parts.append(f"偶然では説明しにくい度合い（G²）は {fmt('g2', g2)} で{'偶然では説明しにくい水準' if g2 >= g2_ok else f'目安の {g2_ok:g} 未満'}")
+        return head + ("、" + "、".join(parts) + "です" if parts else "ます") + "。"
     if inp.screen == "frequency":
         dp = m.get("dp")
         skew = float(th.get("dp_skew", 0.5))
@@ -205,7 +231,12 @@ def explain_sections(inp: ExplainInput, thresholds: dict[str, Any]) -> list[tupl
     codes = {f.code for f in flags}
     sections: list[tuple[str, list[str]]] = []
 
-    facts = [_render(JUDGMENTS[f.code], inp, f) for f in flags if f.code in JUDGMENTS]
+    facts: list[str] = []
+    if not (codes & _ALREADY_EXPLAINS_DISAGREEMENT):
+        d = _disagreement_sentence(inp, thresholds)
+        if d:
+            facts.append(d)
+    facts += [_render(JUDGMENTS[f.code], inp, f) for f in flags if f.code in JUDGMENTS]
     facts = list(dict.fromkeys(facts))[:2] if facts else [_level_sentence(inp, thresholds)]
     sections.append((H_FACT, [x for x in facts if x]))
 

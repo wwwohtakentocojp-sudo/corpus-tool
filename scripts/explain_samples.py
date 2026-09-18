@@ -50,12 +50,21 @@ def sample_collocation(corpus: Corpus, node: str, pick: str | None, th) -> tuple
 
     def flags_of(r):
         return check_collocation_row(r["mi"], r["t"], int(r["cooccur"]), bool(r["is_function"]), False, th,
-                                     int(r["freq_node"]), int(r["freq_collocate"]), cutoff)
+                                     int(r["freq_node"]), int(r["freq_collocate"]), cutoff, float(r["g2"]))
 
     if pick == "flagged":
         row = next(r for _, r in tbl.iterrows() if any(f.code == "MI_HIGH_LOW_FREQ" for f in flags_of(r)))
+    elif pick == "disagree":
+        # logDice は目安以上だが MI が偶然に近い（指標が食い違う）組
+        row = next(r for _, r in tbl.iterrows() if r["log_dice"] >= th["log_dice_strong"] and r["mi"] < th["mi_meaningful"]
+                   and not any(f.code in ("BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD") for f in flags_of(r)))
     elif pick == "clean":
-        row = next(r for _, r in tbl.iterrows() if not flags_of(r))
+        # フラグ無しかつ 3 指標すべてが目安以上
+        cands = [r for _, r in tbl.iterrows() if not flags_of(r) and r["log_dice"] >= th["log_dice_strong"]
+                 and r["mi"] >= th["mi_meaningful"] and r["g2"] >= th["g2_significant"]]
+        if not cands:
+            raise LookupError(f"『{node}』には、フラグ無しで3指標すべてが目安以上の共起語がありません")
+        row = cands[0]
     elif pick:
         row = tbl[tbl["label"] == pick].iloc[0]
     else:
@@ -114,8 +123,20 @@ def main() -> int:
         sample_frequency(corpus, "俺", th),
         sample_keyness(corpus, "俺", "夏目漱石", th),
         sample_keyness(corpus, "下人", "芥川龍之介", th),
-        sample_collocation(corpus, "先生", "clean", th),     # フラグ無し（注意ブロックが出ないことの確認）
+        sample_collocation(corpus, "先生", "disagree", th),  # 指標が食い違う組（NOT_DISTINGUISHABLE が立つ想定）
     ]
+    # サンプル 7: フラグ無しで 3 指標すべてが目安以上の組を、いくつかの中心語から探す
+    found = None
+    for node in ["先生", "奥さん", "手紙", "赤シャツ", "山嵐", "下人", "老婆", "母", "父", "叔父", "友達", "病気", "死ぬ"]:
+        try:
+            found = sample_collocation(corpus, node, "clean", th)
+            break
+        except (LookupError, StopIteration, IndexError):
+            continue
+    if found:
+        samples.append(found)
+    else:
+        print("サンプル 7: フラグ無しで 3 指標すべてが目安以上の組み合わせは、探索した中心語の範囲では見つかりませんでした。\n")
     for i, (inp, title) in enumerate(samples, 1):
         print("=" * 78)
         print(f"サンプル {i}: {title}")

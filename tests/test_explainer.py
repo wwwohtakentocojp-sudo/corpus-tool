@@ -19,18 +19,39 @@ def test_no_flags_only_fact_and_paper():
     assert H_DONT not in text and H_NEXT not in text
     assert "注意" not in text.split(H_PAPER)[0]  # 代替文を出さない
     assert "『先生』と『奥さん』は 12 回一緒に出ており" in text and "目安の 7 を上回り" in text
-    assert "結びつきありの水準" in text and "偶然では説明しにくい水準" in text
+    assert "結びつきありの水準" in text and "偶然では説明しにくい水準です。" in text
 
 
-def test_level_sentence_does_not_call_chance_level_pair_strong():
-    inp = ExplainInput(
+def _disagree(flags):
+    return ExplainInput(
         screen="collocation",
         metrics={"cooccur": 23, "freq_node": 644, "freq_collocate": 64, "mi": 0.36, "t": 1.05, "log_dice": 9.78, "g2": 1.4, "p": 0.24, "n_total": 170478},
-        flags=[], words={"WORD": "先生", "COLLOCATE": "顔"}, settings={"window_label": "同一文内"},
+        flags=flags, words={"WORD": "先生", "COLLOCATE": "顔"}, settings={"window_label": "同一文内"},
     )
-    text = explain(inp, TH)
+
+
+def test_disagreement_stated_first_and_not_called_strong():
+    text = explain(_disagree([]), TH)
     assert "結びつきが強い水準" not in text
-    assert "偶然に近い水準" in text and "目安の 6.63 に達していません" in text
+    facts = dict(explain_sections(_disagree([]), TH))[H_FACT]
+    assert facts[0].startswith("『先生』と『顔』は、指標によって評価が分かれます。")
+    assert "特別な結びつきとは言えません" in facts[0]
+
+
+def test_not_distinguishable_gives_dont_section_and_avoids_significance_wording():
+    flags = [make_flag("NOT_DISTINGUISHABLE", g2=1.4, threshold=6.63)]
+    secs = dict(explain_sections(_disagree(flags), TH))
+    assert H_DONT in secs and "判断がつかない" in secs[H_DONT][0]
+    assert secs[H_NEXT] == ["この組み合わせについては結論を出さず、データを増やすか、別の組み合わせを検討してください。"]
+    assert secs[H_FACT][0].startswith("『先生』と『顔』は、指標によって評価が分かれます。")
+    text = explain(_disagree(flags), TH)
+    assert "有意" not in text and "偶然の範囲" not in text
+
+
+def test_disagreement_not_repeated_when_both_high_flag_present():
+    flags = [make_flag("BOTH_HIGH_FREQUENCY", freq_node=644, freq_collocate=2721, top_percent=1.0)]
+    facts = dict(explain_sections(_disagree(flags), TH))[H_FACT]
+    assert not any("指標によって評価が分かれます" in f for f in facts)
 
 
 def test_flag_rows_only_and_no_generic_cautions():

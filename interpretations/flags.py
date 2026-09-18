@@ -64,6 +64,11 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
         "どちらも非常によく使われる語どうしの組み合わせです（中心語 {freq_node:,} 回、共起語 {freq_collocate:,} 回。"
         "いずれも頻度上位 {top_percent:g}% 以内）。logDice が高くても、特別な結びつきとは言えません。",
     ),
+    "NOT_DISTINGUISHABLE": (
+        WARNING,
+        "この回数では、偶然そうなったのかどうかを区別できません（偶然では説明しにくい度合い G² = {g2:.1f}、目安 {threshold:g}）。"
+        "『結びつきがない』という意味ではなく、『判断がつかない』という意味です。回数が増えれば結論が変わる可能性があります。",
+    ),
     "T_ONLY_FUNCTION_WORD": (
         WARNING,
         "Tスコアは高い（{t:.1f}）のにMIスコアは低い（{mi:.1f}）組み合わせです。"

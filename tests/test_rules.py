@@ -76,10 +76,11 @@ def test_effect_size_boundary(lr, expected):
 
 
 def test_vectorized_collocation_and_keyness_flags_match_scalar():
-    col = pd.DataFrame({"mi": [6.0, 1.0], "t": [1.0, 5.0], "cooccur": [3, 50], "is_function": [False, True],
-                        "freq_node": [600, 600], "freq_collocate": [3, 2000]})
+    col = pd.DataFrame({"mi": [6.0, 1.0, 0.4], "t": [1.0, 5.0, 1.0], "cooccur": [3, 50, 23], "is_function": [False, True, False],
+                        "freq_node": [600, 600, 600], "freq_collocate": [3, 2000, 64], "g2": [14.9, 51.8, 1.4]})
     out = flag_collocation_table(col, TH, include_function_words=False, high_freq_cutoff=100)
-    assert out["flags"].tolist() == [["MI_HIGH_LOW_FREQ"], ["BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "FUNCTION_WORD_NOISE"]]
+    assert out["flags"].tolist() == [["MI_HIGH_LOW_FREQ"], ["BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "FUNCTION_WORD_NOISE"],
+                                     ["NOT_DISTINGUISHABLE"]]
     key = pd.DataFrame({"word": ["a", "b", "c"], "log_ratio": [0.5, 2.0, 6.0], "zero_corrected": [False, False, True]})
     assert flag_keyness_table(key, TH)["flags"].tolist() == [["EFFECT_SIZE_TOO_SMALL"], [], ["ZERO_CORRECTED"]]
     assert "0.5" in check_keyness_row(6.0, TH, "c", zero_corrected=True)[0].message
@@ -104,7 +105,18 @@ def test_group_imbalance_boundary(sizes, expected):
 
 TH = {"corpus_min_tokens": 10000, "dp_skew": 0.5, "dp_min_freq": 10, "dp_min_parts": 10, "low_freq": 5,
       "group_imbalance_ratio": 3.0, "mi_high": 5.0, "mi_min_cooccur": 20, "t_high": 2.0, "mi_low": 3.0,
-      "log_ratio_min": 1.0, "high_freq_top_ratio": 0.01}
+      "log_ratio_min": 1.0, "high_freq_top_ratio": 0.01, "g2_significant": 6.63}
+
+
+# --- NOT_DISTINGUISHABLE ---------------------------------------------------------
+@pytest.mark.parametrize("g2, expected", [(6.62, True), (6.63, False), (1.4, True), (None, False), (float("nan"), False)])
+def test_not_distinguishable_boundary(g2, expected):
+    flags = check_collocation_row(1.0, 1.0, 50, False, True, TH, g2=g2)
+    assert ("NOT_DISTINGUISHABLE" in codes(flags)) is expected
+    if expected:
+        msg = flags[0].message
+        assert "判断がつかない" in msg and "結びつきがない" in msg
+        assert "有意" not in msg and "偶然の範囲" not in msg
 
 
 def codes(flags):

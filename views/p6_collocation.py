@@ -82,6 +82,8 @@ def _flag_label(flags: list[str]) -> str:
         marks.append("⚠ 低頻度・要用例")
     if "BOTH_HIGH_FREQUENCY" in flags:
         marks.append("△ 双方が高頻度")
+    if "NOT_DISTINGUISHABLE" in flags:
+        marks.append("？ 判断つかず")
     if "T_ONLY_FUNCTION_WORD" in flags:
         marks.append("△ 高頻度語")
     if "FUNCTION_WORD_NOISE" in flags:
@@ -111,7 +113,7 @@ event = st.dataframe(
         "mi": st.column_config.NumberColumn("珍しさ重視（MI）", format="%.2f", help=glossary.tooltip("mi_score")),
         "t": st.column_config.NumberColumn("安定性（Tスコア）", format="%.2f", help=glossary.tooltip("t_score")),
         "g2": st.column_config.NumberColumn("偶然でない度合い（G²）", format="%.1f", help=glossary.tooltip("log_likelihood")),
-        "注意": st.column_config.Column("注意", help="⚠ 低頻度・要用例: MIが高いが回数が少ない。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語: どこにでも出る語による見かけの共起。"),
+        "注意": st.column_config.Column("注意", help="⚠ 低頻度・要用例: MIが高いが回数が少ない。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語: どこにでも出る語による見かけの共起。？ 判断つかず: 偶然かどうかを区別できる回数に達していない（結びつきがないという意味ではない）。"),
     },
 )
 
