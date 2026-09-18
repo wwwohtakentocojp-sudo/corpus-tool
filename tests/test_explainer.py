@@ -1,4 +1,4 @@
-from interpretations.explainer import H_DONT, H_FACT, H_NEXT, H_PAPER, ExplainInput, explain, explain_sections
+﻿from interpretations.explainer import H_DONT, H_FACT, H_NEXT, H_PAPER, ExplainInput, explain, explain_sections
 from interpretations.flags import make_flag
 
 TH = {"log_dice_strong": 7.0, "dp_skew": 0.5, "mi_meaningful": 3.0, "g2_significant": 6.63}
@@ -106,7 +106,7 @@ def test_frequency_dp_unreliable_omits_dp_from_paper_sentence():
 def test_fact_section_at_most_two_sentences():
     flags = [
         make_flag("BOTH_HIGH_FREQUENCY", freq_node=644, freq_collocate=2721, top_percent=1.0),
-        make_flag("T_ONLY_FUNCTION_WORD", t=5.97, mi=0.57),
+        make_flag("T_HIGH_MI_LOW", t=5.97, mi=0.57),
         make_flag("LOW_COOCCURRENCE", cooccur=12, threshold=20, mi_note=""),
     ]
     secs = dict(explain_sections(_colloc(flags), TH))

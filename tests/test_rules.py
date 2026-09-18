@@ -1,4 +1,4 @@
-"""第2層の全フラグについて、閾値の境界値で ON/OFF が切り替わることを検証する。"""
+﻿"""第2層の全フラグについて、閾値の境界値で ON/OFF が切り替わることを検証する。"""
 import pandas as pd
 import pytest
 
@@ -67,24 +67,14 @@ def test_low_cooccurrence_mi_note_only_when_mi_high():
     assert "起こりやすい" not in no_note.message and no_note.message.endswith("確認してください。")
 
 
-# --- T_ONLY_FUNCTION_WORD -------------------------------------------------------
+# --- T_HIGH_MI_LOW -------------------------------------------------------
 @pytest.mark.parametrize(
     "t, mi, expected",
     [(2.0, 2.9, False), (2.01, 2.9, True), (2.01, 3.0, False), (12.1, 0.5, True)],
 )
-def test_t_only_function_word_boundary(t, mi, expected):
+def test_T_HIGH_MI_LOW_boundary(t, mi, expected):
     flags = check_collocation_row(mi, t, 100, False, True, TH)
-    assert ("T_ONLY_FUNCTION_WORD" in codes(flags)) is expected
-
-
-# --- FUNCTION_WORD_NOISE --------------------------------------------------------
-@pytest.mark.parametrize(
-    "is_function, include_fw, expected",
-    [(True, False, True), (True, True, False), (False, False, False)],
-)
-def test_function_word_noise(is_function, include_fw, expected):
-    flags = check_collocation_row(1.0, 1.0, 10, is_function, include_fw, TH)
-    assert ("FUNCTION_WORD_NOISE" in codes(flags)) is expected
+    assert ("T_HIGH_MI_LOW" in codes(flags)) is expected
 
 
 # --- EFFECT_SIZE_TOO_SMALL -------------------------------------------------------
@@ -93,15 +83,22 @@ def test_effect_size_boundary(lr, expected):
     assert ("EFFECT_SIZE_TOO_SMALL" in codes(check_keyness_row(lr, TH, "w"))) is expected
 
 
+# --- NOT_DISTINGUISHABLE（特徴語） ------------------------------------------------
+@pytest.mark.parametrize("g2, expected", [(6.62, True), (6.63, False), (None, False)])
+def test_keyness_not_distinguishable(g2, expected):
+    assert ("NOT_DISTINGUISHABLE" in codes(check_keyness_row(2.0, TH, "w", g2=g2))) is expected
+
+
 def test_vectorized_collocation_and_keyness_flags_match_scalar():
     col = pd.DataFrame({"mi": [6.0, 1.0, 0.4, 0.5], "t": [1.0, 5.0, 1.0, 0.5], "cooccur": [3, 50, 23, 2], "is_function": [False, True, False, False],
                         "freq_node": [600, 600, 600, 600], "freq_collocate": [3, 2000, 64, 5], "g2": [14.9, 51.8, 1.4, 0.3],
                         "log_dice": [7.25, 11.68, 9.78, 4.0]})
     out = flag_collocation_table(col, TH, include_function_words=False, high_freq_cutoff=100)
-    assert out["flags"].tolist() == [["LOW_COOCCURRENCE"], ["BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "FUNCTION_WORD_NOISE"],
+    assert out["flags"].tolist() == [["LOW_COOCCURRENCE"], ["BOTH_HIGH_FREQUENCY", "T_HIGH_MI_LOW"],
                                      ["NOT_DISTINGUISHABLE"], ["LOW_COOCCURRENCE_MINOR", "NOT_DISTINGUISHABLE"]]
-    key = pd.DataFrame({"word": ["a", "b", "c"], "log_ratio": [0.5, 2.0, 6.0], "zero_corrected": [False, False, True]})
-    assert flag_keyness_table(key, TH)["flags"].tolist() == [["EFFECT_SIZE_TOO_SMALL"], [], ["ZERO_CORRECTED"]]
+    key = pd.DataFrame({"word": ["a", "b", "c", "d"], "log_ratio": [0.5, 2.0, 6.0, 3.0], "zero_corrected": [False, False, True, False],
+                        "g2": [20.0, 20.0, 20.0, 1.0]})
+    assert flag_keyness_table(key, TH)["flags"].tolist() == [["EFFECT_SIZE_TOO_SMALL"], [], ["ZERO_CORRECTED"], ["NOT_DISTINGUISHABLE"]]
     assert "0.5" in check_keyness_row(6.0, TH, "c", zero_corrected=True)[0].message
 
 

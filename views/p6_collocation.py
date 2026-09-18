@@ -87,10 +87,8 @@ def _flag_label(flags: list[str]) -> str:
         marks.append("△ 双方が高頻度")
     if "NOT_DISTINGUISHABLE" in flags:
         marks.append("？ 判断つかず")
-    if "T_ONLY_FUNCTION_WORD" in flags:
-        marks.append("△ 高頻度語")
-    if "FUNCTION_WORD_NOISE" in flags:
-        marks.append("機能語")
+    if "T_HIGH_MI_LOW" in flags:
+        marks.append("△ 高頻度語が隣")
     return " ".join(marks)
 
 
@@ -116,7 +114,7 @@ event = st.dataframe(
         "mi": st.column_config.NumberColumn("珍しさ重視（MI）", format="%.2f", help=glossary.tooltip("mi_score")),
         "t": st.column_config.NumberColumn("安定性（Tスコア）", format="%.2f", help=glossary.tooltip("t_score")),
         "g2": st.column_config.NumberColumn("偶然でない度合い（G²）", format="%.1f", help=glossary.tooltip("log_likelihood")),
-        "注意": st.column_config.Column("注意", help="⚠ 回数少・要用例: 指標は目安を超えているが回数が少なく、値が安定しない。回数少: 回数が少なく指標も目安未満。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語: どこにでも出る語による見かけの共起。？ 判断つかず: 偶然かどうかを区別できる回数に達していない（結びつきがないという意味ではない）。"),
+        "注意": st.column_config.Column("注意", help="⚠ 回数少・要用例: 指標は目安を超えているが回数が少なく、値が安定しない。回数少: 回数が少なく指標も目安未満。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語が隣: Tスコアは高いが MI は低く、よく使われる語が隣にあるだけ。？ 判断つかず: 偶然かどうかを区別できる回数に達していない（結びつきがないという意味ではない）。"),
     },
 )
 
@@ -177,12 +175,12 @@ else:
     if len(need_check) > 10:
         st.caption(f"上位10組のみ表示。残り {len(need_check) - 10} 組は表の「注意」列で確認できます。")
 
-noise = view[view["flags"].map(lambda f: "T_ONLY_FUNCTION_WORD" in f or "BOTH_HIGH_FREQUENCY" in f)]
+noise = view[view["flags"].map(lambda f: "T_HIGH_MI_LOW" in f or "BOTH_HIGH_FREQUENCY" in f)]
 if len(noise):
     with st.expander(f"よく使われる語による見かけの共起（{len(noise)} 語）"):
         st.markdown(
-            "どちらも非常によく使われる語どうし（△ 双方が高頻度）、または結びつきの安定性（Tスコア）は高いのに珍しさ重視（MIスコア）は低い組み合わせ（△ 高頻度語）です。"
-            " 単にその語がどこにでも出るというだけで、logDice が高くても発見ではありません。"
+            "どちらも非常によく使われる語どうし（△ 双方が高頻度）、または結びつきの安定性（Tスコア）は高いのに珍しさ重視（MIスコア）は低い組み合わせ（△ 高頻度語が隣）です。"
+            " よく使われる語が隣にあるだけで、logDice が高くても発見ではありません。"
         )
         nz = noise.copy()
         nz["注意"] = nz["flags"].map(_flag_label)
@@ -194,7 +192,7 @@ ncfg = cfg.get("network", {})
 st.caption("頻度上位の語を節点にし、同じ文（または前後 n 語）に一緒に出た語同士を線で結びます。設定で見た目が大きく変わるので、論文には必ず設定値を明記してください。")
 n1, n2, n3 = st.columns(3)
 top_n = n1.slider("節点にする語数（頻度上位）", 10, 150, int(ncfg.get("top_n", 60)))
-min_ld = n2.slider("線を引く logDice の下限", 0.0, 14.0, float(ncfg.get("min_log_dice", 7.0)), 0.5)
+min_ld = n2.slider("線を引く logDice の下限", 0.0, 14.0, float(th["log_dice_strong"]), 0.5)
 net_method = n3.selectbox("共起の単位", ["sentence", "fixed"], index=0 if method != "fixed" else 1, format_func=lambda k: METHODS[k])
 if st.button("ネットワークを描く"):
     g, edges, nodes = build_network(corpus.tokens, unit, s.include_function_words, top_n, net_method, window, min_ld, int(ncfg.get("min_cooccur", 2)))

@@ -57,7 +57,7 @@ def sample_collocation(corpus: Corpus, node: str, pick: str | None, th) -> tuple
     elif pick == "disagree":
         # logDice は目安以上だが MI が偶然に近い（指標が食い違う）組
         row = next(r for _, r in tbl.iterrows() if r["log_dice"] >= th["log_dice_strong"] and r["mi"] < th["mi_meaningful"]
-                   and not any(f.code in ("BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD") for f in flags_of(r)))
+                   and not any(f.code in ("BOTH_HIGH_FREQUENCY", "T_HIGH_MI_LOW") for f in flags_of(r)))
     elif pick == "clean":
         # フラグ無しかつ 3 指標すべてが目安以上
         cands = [r for _, r in tbl.iterrows() if not flags_of(r) and r["log_dice"] >= th["log_dice_strong"]
@@ -109,7 +109,7 @@ def sample_keyness(corpus: Corpus, word: str, a: str, th) -> tuple[ExplainInput,
     sizes = group_sizes(corpus, "author")
     n_a = int(sizes.loc[sizes["author"] == a, "n_documents"].sum())
     n_b = int(sizes.loc[sizes["author"] != a, "n_documents"].sum())
-    flags = check_keyness_row(float(row["log_ratio"]), th, word, bool(row["zero_corrected"])) + check_group_imbalance({a: n_a, "それ以外の作者": n_b}, th)
+    flags = check_keyness_row(float(row["log_ratio"]), th, word, bool(row["zero_corrected"]), float(row["g2"])) + check_group_imbalance({a: n_a, "それ以外の作者": n_b}, th)
     inp = ExplainInput(
         screen="keyness",
         metrics={"freq_a": int(row["freq_a"]), "freq_b": int(row["freq_b"]), "n_a": len(ta), "n_b": len(tb),

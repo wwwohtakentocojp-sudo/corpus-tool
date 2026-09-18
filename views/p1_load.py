@@ -24,7 +24,7 @@ from corpus.loaders import (
 from corpus.models import Document
 from corpus.pipeline import build_corpus
 from ui import state
-from ui.components import metric_help, show_flags
+from ui.components import glossary_expander, metric_help, show_flags
 
 st.title("1. データを読み込む")
 st.caption("読み込んだテキストは外部に送信されません。すべての処理はこのパソコンの中で行われます。")
@@ -176,6 +176,7 @@ if corpus is not None and corpus.n_tokens > 0:
     st.markdown("#### 分析を始める前の確認")
     flags = pre_analysis_flags(corpus, thresholds(cfg))
     show_flags(flags, empty_message="データ量に大きな問題はありません。左のメニューから分析に進んでください。")
+    glossary_expander(["data_size", "token_type"], title="❓ データ量の目安と、延べ語数・異なり語数について")
 
     analyzer = get_analyzer(corpus.language, cfg)
     loaded_docs = state.get_documents()

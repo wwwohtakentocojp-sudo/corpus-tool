@@ -67,8 +67,13 @@ class _Safe(dict):
         return "{" + k + "}"
 
 
-def _render(template: str, inp: ExplainInput, flag: Flag | None = None) -> str:
+def _render(template: str, inp: ExplainInput, flag: Flag | None = None, thresholds: dict[str, Any] | None = None) -> str:
+    """{name} を埋める。優先順: 閾値のテンプレート変数 < 指標の値 < フラグの詳細 < 語。"""
+    from interpretations.glossary import template_variables
+
     ctx: dict[str, Any] = {}
+    if thresholds is not None:
+        ctx.update(template_variables({"thresholds": thresholds}))
     ctx.update({k: fmt(k, v) for k, v in inp.metrics.items()})
     if flag:
         ctx.update({k: fmt(k, v) for k, v in flag.details.items()})
@@ -81,17 +86,15 @@ def _render(template: str, inp: ExplainInput, flag: Flag | None = None) -> str:
 # ---------------------------------------------------------------------------
 JUDGMENTS: dict[str, str] = {
     "BOTH_HIGH_FREQUENCY": "『{WORD}』と『{COLLOCATE}』はどちらも非常によく使われる語です。結びつきの強さ・総合（logDice）が {log_dice} と高いのは両方がよく出る語だからで、特別な結びつきとは言えません。",
-    "T_ONLY_FUNCTION_WORD": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、珍しさ重視の結びつき（MIスコア）は {mi} と低く、『{COLLOCATE}』がどこにでも出る語であるために並んでいるだけです。",
+    "T_HIGH_MI_LOW": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、珍しさ重視の結びつき（MIスコア）は {mi} と低く、よく使われる語である『{COLLOCATE}』が隣にあるだけです。",
     "LOW_COOCCURRENCE": "『{WORD}』と『{COLLOCATE}』は指標の上では結びつきがありそうに見えますが（logDice = {log_dice}、MI = {mi}）、一緒に出た回数が {cooccur} 回しかなく、この回数では指標の値自体が安定しません。",
     "NOT_DISTINGUISHABLE": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、偶然では説明しにくい度合い（G²）は {g2} で目安の {threshold} に達しておらず、偶然そうなったのかどうかを今のデータでは区別できません。",
-    "FUNCTION_WORD_NOISE": "『{COLLOCATE}』は機能語（助詞・冠詞など）で、内容の分析では読み飛ばす行です。",
     "DP_TOO_FEW_PARTS": "『{WORD}』は {freq} 回出現しています。文書数が {n_parts} と少ないため、散らばり具合（分散度DP）= {dp} は参考値にとどまります。",
     "DISPERSION_SKEWED": "『{WORD}』は {freq} 回出現していますが、散らばり具合（分散度DP）が {dp} で、一部の文書に集中しています。",
     "LOW_FREQUENCY": "『{WORD}』の出現回数は {freq} 回で、主張の根拠にするには少なすぎます。",
     "ZERO_CORRECTED": "『{WORD}』は「{GROUP_PRESENT}」グループに {freq_present} 回出ていますが、「{GROUP_ABSENT}」グループには一度も出ていません。差の大きさ（log ratio）= {log_ratio} は、0 回の側に 0.5 を足して求めた補正値です。",
-    "EFFECT_SIZE_TOO_SMALL": "『{WORD}』の差の大きさ（log ratio）は {log_ratio} で、目安の 1（2倍）に達していません。実質的な差はごくわずかです。",
+    "EFFECT_SIZE_TOO_SMALL": "『{WORD}』の差の大きさ（log ratio）は {log_ratio} で、目安の {log_ratio_min}（{log_ratio_times} 倍）に達していません。実質的な差はごくわずかです。",
     "GROUP_IMBALANCE": "比較した2つのグループは文書数に {ratio} 倍の偏りがあります（「{group_a}」{size_a} 文書、「{group_b}」{size_b} 文書）。",
-    "CORPUS_TOO_SMALL": "総語数が {total_tokens} 語で、目安の {threshold} 語に達していません。",
 }
 
 # フラグ → 次に確認すべきこと
@@ -99,27 +102,25 @@ NEXT_STEPS: dict[str, str] = {
     "LOW_COOCCURRENCE": "『{WORD}』と『{COLLOCATE}』の用例を、KWIC 画面で全件（{cooccur} 件）確認してください。",
     "NOT_DISTINGUISHABLE": "この組み合わせについては結論を出さず、データを増やすか、別の組み合わせを検討してください。",
     "BOTH_HIGH_FREQUENCY": "この組み合わせは発見として扱わず、logDice が高く、かつ共起語の出現回数が際立って多くはない組み合わせを探してください。",
-    "T_ONLY_FUNCTION_WORD": "『{COLLOCATE}』が機能語なら、集計設定で機能語を除外してください。内容語なら、この行は読み飛ばしてください。",
-    "FUNCTION_WORD_NOISE": "文体・文法の研究で機能語を対象にする場合だけ「機能語を含める」を ON にしてください。",
+    "T_HIGH_MI_LOW": "この行は発見として扱わず、読み飛ばしてください。『{COLLOCATE}』が助詞・冠詞のような機能語なら、集計設定で機能語を除外できます。",
     "DISPERSION_SKEWED": "『{WORD}』がどの文書に集中しているかを、頻度分析画面の内訳表で確認してください。",
     "LOW_FREQUENCY": "『{WORD}』について主張する前に、データを増やせないか検討してください。",
-    "DP_TOO_FEW_PARTS": "散らばり具合（分散度DP）は、文書数が 10 以上になってから判断してください。",
+    "DP_TOO_FEW_PARTS": "散らばり具合（分散度DP）は、文書数が {dp_min_parts} 以上になってから判断してください。",
     "ZERO_CORRECTED": "『{WORD}』は、差の大きさの数値ではなく「{GROUP_ABSENT}」グループには出ないという事実として報告し、KWIC 画面で「{GROUP_PRESENT}」グループでの用例を確認してください。",
-    "EFFECT_SIZE_TOO_SMALL": "差の大きさ（log ratio）の絶対値が 1 以上の語に絞って解釈してください。",
+    "EFFECT_SIZE_TOO_SMALL": "差の大きさ（log ratio）の絶対値が {log_ratio_min} 以上の語に絞って解釈してください。",
     "GROUP_IMBALANCE": "結果を報告するときは、各グループの文書数と延べ語数を併記してください。",
-    "CORPUS_TOO_SMALL": "データを増やすか、基本統計と用例の確認までにとどめてください。",
 }
 
 # 判定文を出す順（重要なものを先に）
-_ORDER = ["CORPUS_TOO_SMALL", "GROUP_IMBALANCE", "BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "LOW_COOCCURRENCE",
-          "NOT_DISTINGUISHABLE", "FUNCTION_WORD_NOISE", "DP_TOO_FEW_PARTS", "DISPERSION_SKEWED", "LOW_FREQUENCY",
+_ORDER = ["GROUP_IMBALANCE", "BOTH_HIGH_FREQUENCY", "T_HIGH_MI_LOW", "LOW_COOCCURRENCE",
+          "NOT_DISTINGUISHABLE", "DP_TOO_FEW_PARTS", "DISPERSION_SKEWED", "LOW_FREQUENCY",
           "ZERO_CORRECTED", "EFFECT_SIZE_TOO_SMALL"]
 
 # 表の注意列にだけ出し、解説文には出さないフラグ（弱い注記）
 TABLE_ONLY = {"LOW_COOCCURRENCE_MINOR"}
 
 # 「よく使われる語どうし」の趣旨を既に述べるフラグ。これらがあれば食い違いの文は重複するので出さない
-_ALREADY_EXPLAINS_DISAGREEMENT = {"BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD"}
+_ALREADY_EXPLAINS_DISAGREEMENT = {"BOTH_HIGH_FREQUENCY", "T_HIGH_MI_LOW"}
 
 
 def _disagreement_sentence(inp: ExplainInput, th: dict[str, Any]) -> str | None:
@@ -176,11 +177,15 @@ def _level_sentence(inp: ExplainInput, th: dict[str, Any]) -> str:
             return f"『{w.get('WORD')}』は {fmt('freq', m.get('freq'))} 回（100万語あたり {fmt('pmw', m.get('pmw'))} 回）出現し、散らばり具合（分散度DP）は {fmt('dp', dp)} で、目安の {skew:g} を{rel}。"
         return f"『{w.get('WORD')}』は {fmt('freq', m.get('freq'))} 回（100万語あたり {fmt('pmw', m.get('pmw'))} 回）出現しています。"
     if inp.screen == "keyness":
+        from interpretations.glossary import fmt_threshold
+
         lr = m.get("log_ratio")
+        lr_min = float(th.get("log_ratio_min", 1.0))
         side = w.get("GROUP_A") if (lr or 0) > 0 else w.get("GROUP_B")
         times = 2 ** abs(lr) if lr is not None and lr == lr else None
         times_s = f"（約 {times:.1f} 倍）" if times is not None and times < 100 else ""
-        return f"『{w.get('WORD')}』は「{side}」グループのほうに多く、差の大きさ（log ratio）は {fmt('log_ratio', lr)}{times_s} で、目安の 1（2倍）以上です。"
+        return (f"『{w.get('WORD')}』は「{side}」グループのほうに多く、差の大きさ（log ratio）は {fmt('log_ratio', lr)}{times_s} で、"
+                f"目安の {fmt_threshold(lr_min)}（{fmt_threshold(2 ** lr_min)} 倍）以上です。")
     return ""
 
 
@@ -239,7 +244,7 @@ def explain_sections(inp: ExplainInput, thresholds: dict[str, Any]) -> list[tupl
         d = _disagreement_sentence(inp, thresholds)
         if d:
             facts.append(d)
-    facts += [_render(JUDGMENTS[f.code], inp, f) for f in flags if f.code in JUDGMENTS]
+    facts += [_render(JUDGMENTS[f.code], inp, f, thresholds) for f in flags if f.code in JUDGMENTS]
     facts = list(dict.fromkeys(facts))[:2] if facts else [_level_sentence(inp, thresholds)]
     sections.append((H_FACT, [x for x in facts if x]))
 
@@ -249,7 +254,7 @@ def explain_sections(inp: ExplainInput, thresholds: dict[str, Any]) -> list[tupl
     if donts:
         sections.append((H_DONT, donts))
 
-    nexts = list(dict.fromkeys(_render(NEXT_STEPS[f.code], inp, f) for f in flags if f.code in NEXT_STEPS))
+    nexts = list(dict.fromkeys(_render(NEXT_STEPS[f.code], inp, f, thresholds) for f in flags if f.code in NEXT_STEPS))
     if nexts:
         sections.append((H_NEXT, nexts))
     return sections

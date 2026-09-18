@@ -122,7 +122,9 @@ uv sync --extra large-models
 解説は3つの部品から組み立てます。AI は使いません。
 
 1. 用語辞書（`interpretations/glossary.yaml`）… 各指標の意味と注意。画面の「?」から参照します。
+   本文中の閾値は `{変数名}` で書かれ、`config.yaml` の値で埋められます（数値を二重に持たないため）。
 2. 判定ルール（`interpretations/rules.py`）… 数値と閾値から「注意すべき状況（フラグ）」を決めます。閾値は `config.yaml`。
+   辞書とルールの対応表は `docs/consistency.md` にあります。
 3. 解説文（`interpretations/explainer.py`）… 立っているフラグに対応する文だけを並べます。
    フラグが無ければ注意は表示しません。毎回同じ注意が並ぶと読まれなくなるためです。
 

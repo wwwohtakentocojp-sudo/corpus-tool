@@ -7,6 +7,7 @@ from app_config import thresholds
 from corpus.checks import group_columns, group_sizes
 from interpretations import glossary
 from interpretations.explainer import ExplainInput
+from interpretations.glossary import fmt_threshold
 from interpretations.rules import check_group_imbalance, check_keyness_row, flag_keyness_table
 from stats.keyness import keyness_table, split_by_group
 from ui import state
@@ -18,12 +19,14 @@ s = state.sidebar_display_options()
 cfg = state.config()
 th = thresholds(cfg)
 kcfg = cfg.get("keyness", {})
+g2_sig = float(th["g2_significant"])
+lr_min = float(th["log_ratio_min"])
 
 st.warning(
     "★ データが大きいと、検定（p値）はほとんど全ての語で「有意」になります。"
-    " p値ではなく **差の大きさ（log ratio）** で判断してください。+1 で2倍、+2 で4倍、+3 で8倍。目安は絶対値 1 以上です。"
+    f" p値ではなく **差の大きさ（log ratio）** で判断してください。+1 で2倍、+2 で4倍、+3 で8倍。目安は絶対値 {fmt_threshold(lr_min)} 以上です。"
 )
-glossary_expander(["log_ratio", "log_likelihood", "p_value", "odds_ratio", "pmw"])
+glossary_expander(["log_ratio", "log_likelihood", "p_value", "odds_ratio", "pmw", "data_size"])
 
 gcols = group_columns(corpus)
 if not gcols:
@@ -55,27 +58,55 @@ table = state.cached(
     lambda: flag_keyness_table(keyness_table(tokens_a, tokens_b, s.unit, s.include_function_words), th),
 )
 
-f1, f2, f3 = st.columns(3)
-min_g2 = f1.number_input("「差があるか」の足切り（G² がこれ以上）", min_value=0.0, value=float(kcfg.get("min_g2", 6.63)), step=0.5,
-                         help="6.63 は p<0.01、10.83 は p<0.001 に相当します。これは足切りであって、重要さの順位ではありません。")
+# --- 絞り込み ------------------------------------------------------------------
+f1, f2, f3 = st.columns([3, 2, 3])
+show_nd = f1.toggle(
+    "判断がつかない語も表示する",
+    value=not bool(kcfg.get("hide_not_distinguishable", True)),
+    help=(f"偶然では説明しにくい度合い（G²）が目安（{fmt_threshold(g2_sig)}）に達しない語は、既定では非表示です。"
+          " これらは「差がない語」ではなく「今のデータでは判断がつかない語」です。ON にすると表示され、注意列に「判断つかず」が付きます。"),
+)
 min_total = f2.number_input("両群合計の出現回数がこれ以上", min_value=1, value=int(kcfg.get("min_total_freq", 5)))
 direction = f3.radio("表示", ["A に多い語", "B に多い語", "両方"], horizontal=True)
 
-view = table[(table["g2"] >= min_g2) & ((table["freq_a"] + table["freq_b"]) >= min_total)]
+base = table[(table["freq_a"] + table["freq_b"]) >= min_total]
+n_nd = int((base["g2"] < g2_sig).sum())
+view = base if show_nd else base[base["g2"] >= g2_sig]
 if direction == "A に多い語":
     view = view[view["log_ratio"] > 0]
 elif direction == "B に多い語":
     view = view[view["log_ratio"] < 0].sort_values("log_ratio")
 
+if not show_nd:
+    st.info(
+        f"G² が目安（{fmt_threshold(g2_sig)}）に達しない語 **{n_nd:,} 件** を非表示にしています。"
+        " これらは『差がない語』ではなく『今のデータでは判断がつかない語』です。回数が少ない語（新語・珍しい語）ほど含まれます。"
+        " 見るには上の「判断がつかない語も表示する」を ON にしてください。"
+    )
+else:
+    st.caption(f"判断がつかない語（G² < {fmt_threshold(g2_sig)}）{n_nd:,} 件を含めて表示しています。注意列の「？ 判断つかず」で見分けられます。")
+
+
+def _flag_label(flags: list[str]) -> str:
+    marks = []
+    if "NOT_DISTINGUISHABLE" in flags:
+        marks.append("？ 判断つかず")
+    if "EFFECT_SIZE_TOO_SMALL" in flags:
+        marks.append("△ 差が小さい")
+    if "ZERO_CORRECTED" in flags:
+        marks.append("（0 補正）")
+    return " ".join(marks)
+
+
 shown = view.copy()
-shown["注意"] = shown["flags"].map(lambda f: ("△ 差が小さい " if "EFFECT_SIZE_TOO_SMALL" in f else "") + ("（0 補正）" if "ZERO_CORRECTED" in f else ""))
+shown["注意"] = shown["flags"].map(_flag_label)
 shown["odds"] = [("片方が0回のため算出しません" if z else f"{o:.2f}") for o, z in zip(shown["odds_ratio"], shown["zero_corrected"])]
 shown = shown[["label", "pos", "freq_a", "freq_b", "pmw_a", "pmw_b", "log_ratio", "g2", "p", "odds", "注意"]]
 
 n_small = int(view["flags"].map(lambda f: "EFFECT_SIZE_TOO_SMALL" in f).sum())
-st.markdown(f"**{len(view):,} 語**（足切り前 {len(table):,} 語）。差の大きさ（log ratio）の順に並んでいます。")
+st.markdown(f"**{len(view):,} 語**（絞り込み前 {len(table):,} 語）。差の大きさ（log ratio）の順に並んでいます。")
 if n_small:
-    st.info(f"このうち {n_small} 語は差の大きさ（log ratio）の絶対値が {th['log_ratio_min']} 未満です。p値が小さくても、実質的な発見として扱わないでください（「注意」列）。")
+    st.info(f"このうち {n_small} 語は差の大きさ（log ratio）の絶対値が {fmt_threshold(lr_min)} 未満です。p値が小さくても、実質的な発見として扱わないでください（「注意」列）。")
 
 event = st.dataframe(
     shown,
@@ -87,15 +118,15 @@ event = st.dataframe(
     column_config={
         "label": st.column_config.Column("語"),
         "pos": st.column_config.Column("品詞"),
-        "freq_a": st.column_config.NumberColumn(f"回数 A", format="%d", help=glossary.tooltip("frequency")),
-        "freq_b": st.column_config.NumberColumn(f"回数 B", format="%d", help=glossary.tooltip("frequency")),
+        "freq_a": st.column_config.NumberColumn("回数 A", format="%d", help=glossary.tooltip("frequency")),
+        "freq_b": st.column_config.NumberColumn("回数 B", format="%d", help=glossary.tooltip("frequency")),
         "pmw_a": st.column_config.NumberColumn("pmw A", format="%.1f", help=glossary.tooltip("pmw")),
         "pmw_b": st.column_config.NumberColumn("pmw B", format="%.1f", help=glossary.tooltip("pmw")),
         "log_ratio": st.column_config.NumberColumn("差の大きさ（log ratio）", format="%+.2f", help=glossary.tooltip("log_ratio")),
         "g2": st.column_config.NumberColumn("偶然でない度合い（G²）", format="%.1f", help=glossary.tooltip("log_likelihood")),
         "p": st.column_config.NumberColumn("p値", format="%.4f", help=glossary.tooltip("p_value")),
         "odds": st.column_config.Column("オッズ比", help=glossary.tooltip("odds_ratio")),
-        "注意": st.column_config.Column("注意", help="△ 差が小さい: log ratio の絶対値が目安未満。（0 補正）: 片方の群で 0 回のため log ratio は 0.5 を足して計算。オッズ比は算出しない。"),
+        "注意": st.column_config.Column("注意", help="？ 判断つかず: G² が目安未満（差がないのではなく判断がつかない）。△ 差が小さい: log ratio の絶対値が目安未満。（0 補正）: 片方の群で 0 回のため log ratio は 0.5 を足して計算。オッズ比は算出しない。"),
     },
 )
 sel_rows = event.selection.rows if event and event.selection else []
@@ -103,7 +134,7 @@ if sel_rows:
     r = view.iloc[sel_rows[0]]
     grp = value_a if r["log_ratio"] > 0 else value_b
     gval = value_a if r["log_ratio"] > 0 else vb
-    row_flags = check_keyness_row(float(r["log_ratio"]), th, str(r["label"]), bool(r["zero_corrected"])) + imbalance_flags
+    row_flags = check_keyness_row(float(r["log_ratio"]), th, str(r["label"]), bool(r["zero_corrected"]), float(r["g2"])) + imbalance_flags
     inp = ExplainInput(
         screen="keyness",
         metrics={"freq_a": int(r["freq_a"]), "freq_b": int(r["freq_b"]), "n_a": len(tokens_a), "n_b": len(tokens_b),
@@ -125,4 +156,7 @@ export = view.drop(columns=["flags"]).rename(columns={"word": "集計キー", "l
                                                      "pmw_a": f"pmw_{value_a}", "pmw_b": f"pmw_{value_b}", "g2": "G2", "p": "p値",
                                                      "log_ratio": "log_ratio", "odds_ratio": "オッズ比", "zero_corrected": "0補正", "direction": "多い側"})
 download_csv(export, f"keyness_{gcol}_{value_a}_vs_{value_b}.csv", key="dl_keyness")
-st.caption(f"設定: グループ列 = {gcol}、A = {value_a}、B = {value_b}、G² ≥ {min_g2}、合計出現 ≥ {min_total}、機能語 {'含む' if s.include_function_words else '除く'}、単位 = {'見出し語' if s.unit == 'lemma' else '表層形'}。論文にはこれらを明記してください。")
+st.caption(
+    f"設定: グループ列 = {gcol}、A = {value_a}、B = {value_b}、判断がつかない語（G² < {fmt_threshold(g2_sig)}）を{'表示' if show_nd else '非表示'}、"
+    f"合計出現 ≥ {min_total}、機能語 {'含む' if s.include_function_words else '除く'}、単位 = {'見出し語' if s.unit == 'lemma' else '表層形'}。論文にはこれらを明記してください。"
+)

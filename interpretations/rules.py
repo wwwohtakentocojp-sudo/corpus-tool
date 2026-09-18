@@ -86,8 +86,7 @@ def check_collocation_row(mi: float, t: float, cooccur: int, is_function: bool, 
       LOW_COOCCURRENCE_MINOR : cooccur < low_cooccur_threshold で上に該当しない（表の注意列のみ。解説には出さない）
       BOTH_HIGH_FREQUENCY    : freq_node >= cutoff かつ freq_collocate >= cutoff（双方が頻度上位）
       NOT_DISTINGUISHABLE    : g2 < g2_significant（偶然かどうかを区別できない。「結びつきがない」ではない）
-      T_ONLY_FUNCTION_WORD   : t > t_high かつ mi < mi_low
-      FUNCTION_WORD_NOISE    : 機能語 かつ 機能語を含めない設定
+      T_HIGH_MI_LOW          : t > t_high かつ mi < mi_low（よく使われる語が隣にあるだけ）
     """
     flags: list[Flag] = []
 
@@ -114,9 +113,7 @@ def check_collocation_row(mi: float, t: float, cooccur: int, is_function: bool, 
             flags.append(make_flag("BOTH_HIGH_FREQUENCY", freq_node=int(freq_node), freq_collocate=int(freq_collocate),
                                    top_percent=float(thresholds["high_freq_top_ratio"]) * 100))
     if not pd.isna(t) and not pd.isna(mi) and t > float(thresholds["t_high"]) and mi < float(thresholds["mi_low"]):
-        flags.append(make_flag("T_ONLY_FUNCTION_WORD", t=float(t), mi=float(mi)))
-    if is_function and not include_function_words:
-        flags.append(make_flag("FUNCTION_WORD_NOISE", word=""))
+        flags.append(make_flag("T_HIGH_MI_LOW", t=float(t), mi=float(mi)))
     return flags
 
 
@@ -132,10 +129,13 @@ def flag_collocation_table(df: pd.DataFrame, thresholds: dict[str, Any], include
 
 
 def check_keyness_row(log_ratio: float, thresholds: dict[str, Any], word: str = "",
-                      zero_corrected: bool = False) -> list[Flag]:
-    """EFFECT_SIZE_TOO_SMALL: |log_ratio| < log_ratio_min
-       ZERO_CORRECTED     : 片方の群で 0 回（0.5 補正値）"""
+                      zero_corrected: bool = False, g2: float | None = None) -> list[Flag]:
+    """NOT_DISTINGUISHABLE   : g2 < g2_significant（判断がつかない。「差がない」ではない）
+       EFFECT_SIZE_TOO_SMALL : |log_ratio| < log_ratio_min
+       ZERO_CORRECTED        : 片方の群で 0 回（0.5 補正値）"""
     flags: list[Flag] = []
+    if g2 is not None and not pd.isna(g2) and g2 < float(thresholds["g2_significant"]):
+        flags.append(make_flag("NOT_DISTINGUISHABLE", g2=float(g2), threshold=float(thresholds["g2_significant"])))
     th = float(thresholds["log_ratio_min"])
     if not pd.isna(log_ratio) and abs(log_ratio) < th:
         flags.append(make_flag("EFFECT_SIZE_TOO_SMALL", word=word, log_ratio=float(log_ratio), threshold=th))
@@ -147,9 +147,10 @@ def check_keyness_row(log_ratio: float, thresholds: dict[str, Any], word: str = 
 def flag_keyness_table(df: pd.DataFrame, thresholds: dict[str, Any]) -> pd.DataFrame:
     out = df.copy()
     zc = out["zero_corrected"] if "zero_corrected" in out.columns else pd.Series(False, index=out.index)
+    g2s = out["g2"] if "g2" in out.columns else pd.Series([None] * len(out), index=out.index)
     out["flags"] = [
-        [f.code for f in check_keyness_row(r.log_ratio, thresholds, str(r.word), bool(z))]
-        for r, z in zip(out.itertuples(), zc.tolist())
+        [f.code for f in check_keyness_row(r.log_ratio, thresholds, str(r.word), bool(z), g)]
+        for r, z, g in zip(out.itertuples(), zc.tolist(), g2s.tolist())
     ]
     return out
 

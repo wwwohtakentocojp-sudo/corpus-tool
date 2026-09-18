@@ -3,7 +3,13 @@ from __future__ import annotations
 
 import streamlit as st
 
+from interpretations import glossary
+
 st.set_page_config(page_title="コーパス分析ツール", page_icon="📚", layout="wide")
+
+# 用語辞書のテンプレート変数が config.yaml で全て解決できることを起動時に確認する
+# （未定義の変数があれば、ここで GlossaryTemplateError を出して止める）
+glossary.load_glossary()
 
 pages = [
     st.Page("views/p1_load.py", title="1. データを読み込む", icon="📂", default=True),
