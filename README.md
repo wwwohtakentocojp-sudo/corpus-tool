@@ -19,8 +19,9 @@
 
 デモ版: **https://＜デプロイ後に URL を記入＞**
 
-同梱サンプル（青空文庫の日本語作品、Project Gutenberg の英語作品、Leipzig Corpora Collection のドイツ語ニュース文）で、
-読み込みから基本統計・頻度分析・KWIC・コロケーション・特徴語抽出までの全機能を体験できます。
+同梱サンプル（青空文庫の日本語作品、Project Gutenberg の英語作品、Leipzig Corpora Collection のドイツ語ニュース文。
+出典とライセンスは `samples/README.md`）で、読み込みから基本統計・頻度分析・KWIC・コロケーション・特徴語抽出までの
+全機能を体験できます。
 各画面で表の行を選ぶと「この語の読み方」が表示され、論文にそのまま書ける文例と、言ってはいけないことが確認できます。
 
 **★ デモ版に、ご自身の資料をアップロードしないでください。**
@@ -73,7 +74,7 @@ bash start.sh
 1. **データを読み込む** … 3通りの入力に対応しています。
    - .txt ファイル（複数選択・zip・フォルダのパス）。文字コードは自動判定。青空文庫の注記は自動で除去できます。
    - CSV / Excel（1行 = 1文書）。本文の列と、グループ列（年・ジャンル・話者など）を選びます。
-   - サンプルデータ（`scripts/download_samples.py` で取得）。
+   - サンプルデータ（同梱の `samples/demo/`。完全版は `scripts/download_samples.py` で取得）。
    読み込み後に、データ量の不足やグループ間の文書数の偏りを分析前に警告します。
 2. **前処理の設定** … 語のまとめ方（活用形をまとめるか、表記ゆれをまとめるか）を選びます。
 3. **基本統計** … 延べ語数・異なり語数・語彙の豊かさ（TTR / 標準化TTR）・品詞の構成比。
@@ -191,7 +192,9 @@ uv run streamlit run app.py --server.address localhost
   | `DEMO_MAX_UPLOAD_MB` | デモ版のアップロード上限（MB） | `5` |
   | `REPO_URL` | サイドバーに出す GitHub リポジトリの URL | プレースホルダ |
 
-- サンプルデータはリポジトリに含めず、デモ版では初回アクセス時に取得します（すべて著作権切れまたは CC ライセンスのデータです）。
+- デモ用サンプルは加工済みで `samples/demo/` に同梱しています（すべて著作権切れまたは CC ライセンス。出典は `samples/README.md`）。
+  デモ版は外部からの取得を行いません。更新するときは `scripts/download_samples.py` → `scripts/make_demo_samples.py` の順に実行します。
+- 公開の手順（履歴の author 書き換えとバックアップ、push、Community Cloud の設定）は `docs/deploy.md` にあります。
 
 ## 今後の予定
 

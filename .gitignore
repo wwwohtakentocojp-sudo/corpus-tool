@@ -5,9 +5,11 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 
-# サンプルデータ（scripts/download_samples.py で取得する。README だけは残す）
+# サンプルデータ。完全版（samples/ja, en, de）は scripts/download_samples.py で取得する。
+# デモ用の加工済みサンプル（samples/demo）と README は git で追跡する
 samples/*
 !samples/README.md
+!samples/demo/
 
 # 書き出し・一時ファイル・図
 exports/

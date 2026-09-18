@@ -104,29 +104,18 @@ with tab_table:
 # ---------------------------------------------------------------------------
 with tab_sample:
     sample_dir = ROOT / "samples"
-    sample_files = sorted(sample_dir.glob("*/*.txt")) if sample_dir.exists() else []
+    # デモ用の加工済みサンプル（同梱）と、ローカルで取得した完全版（samples/ja など）の両方を出す
+    sample_files = sorted(sample_dir.rglob("*.txt")) if sample_dir.exists() else []
     sample_files = [p for p in sample_files if not p.name.endswith("-words.txt")]
-    if not sample_files and demo.is_demo():
-        # 公開環境にはサンプルが同梱されないので、初回に取得する（著作権切れ・CC ライセンスのデータのみ）
-        with st.spinner("サンプルデータを取得しています（初回のみ、1分ほどかかります）..."):
-            from scripts.download_samples import main as download_samples
-
-            try:
-                download_samples(["--lang", "all"])
-            except Exception as e:  # noqa: BLE001
-                st.error(f"サンプルの取得に失敗しました: {e}")
-        sample_files = sorted(sample_dir.glob("*/*.txt")) if sample_dir.exists() else []
-        sample_files = [p for p in sample_files if not p.name.endswith("-words.txt")]
-        if sample_files:
-            st.rerun()
     if not sample_files:
-        st.info("サンプルデータがまだありません。プロジェクトのフォルダで `uv run python scripts/download_samples.py` を実行すると用意されます。")
+        st.info("サンプルデータがありません。プロジェクトのフォルダで `uv run python scripts/download_samples.py` を実行すると用意されます。")
     else:
+        st.caption("出典とライセンスは samples/README.md を参照してください（青空文庫・Project Gutenberg・Leipzig Corpora Collection）。")
         chosen = st.multiselect(
-            "サンプル（青空文庫・Project Gutenberg・Leipzig Corpora）",
+            "サンプル",
             options=sample_files,
             default=[],
-            format_func=lambda p: f"{p.parent.name}/{p.name}",
+            format_func=lambda p: str(p.relative_to(sample_dir)).replace("\\", "/"),
         )
         if chosen and not docs:
             decoded = [read_txt_bytes(p.name, p.read_bytes()) for p in chosen]
