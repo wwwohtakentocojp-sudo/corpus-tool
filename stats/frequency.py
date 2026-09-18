@@ -90,6 +90,37 @@ def frequency_table(tokens: pd.DataFrame, unit: str = "lemma", include_function_
     return df[["rank", "word", "label", "pos", "freq", "pmw", "dp", "n_parts"]]
 
 
+def tokens_with_parts(tokens: pd.DataFrame, documents: pd.DataFrame, part_col: str) -> pd.DataFrame:
+    """documents 表のグループ列を tokens に付けて返す（DP をグループ単位で計算するため）。"""
+    if part_col == "doc_id" or part_col in tokens.columns:
+        return tokens
+    return tokens.merge(documents[["doc_id", part_col]], on="doc_id", how="left")
+
+
+def expand_compounds(tokens: pd.DataFrame) -> pd.DataFrame:
+    """複合語を構成要素に置き換えた tokens を返す（「分割した場合」の集計用）。
+
+    compound_parts が空の語はそのまま。分割された語は構成要素ごとの行になり、
+    lemma / lemma_label / surface に構成要素が入る。position は元の語の位置を引き継ぐ。
+    """
+    if "compound_parts" not in tokens.columns:
+        return tokens
+    is_comp = tokens["compound_parts"].astype(str) != ""
+    plain = tokens[~is_comp]
+    comp = tokens[is_comp].copy()
+    if comp.empty:
+        return tokens
+    comp["_part"] = comp["compound_parts"].astype(str).str.split("+")
+    comp = comp.explode("_part")
+    comp["surface"] = comp["_part"]
+    comp["lemma"] = comp["_part"]
+    comp["lemma_label"] = comp["_part"]
+    comp["compound_parts"] = ""
+    comp = comp.drop(columns=["_part"])
+    out = pd.concat([plain, comp], ignore_index=True)
+    return out.sort_values(["doc_id", "position"], kind="stable").reset_index(drop=True)
+
+
 def word_distribution(tokens: pd.DataFrame, word: str, unit: str = "lemma",
                       part_col: str = "doc_id") -> pd.DataFrame:
     """ある語が各部分（文書）に何回出ているか。DP の警告からの確認用。"""

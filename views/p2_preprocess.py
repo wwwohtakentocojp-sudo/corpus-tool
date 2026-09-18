@@ -75,3 +75,21 @@ st.markdown("---")
 st.markdown("#### この言語で注意すること")
 for w in analyzer.language_warnings(new_opts):
     st.info(w)
+
+# --- 見出し語化の比較（ドイツ語 lemma_mode = both のとき） -------------------------
+corpus = state.get_corpus()
+if corpus is not None and "lemma_alt" in corpus.tokens.columns:
+    t = corpus.tokens
+    diff = t[(t["lemma_alt"] != "") & (t["lemma_alt"] != t["lemma"])]
+    if len(diff):
+        st.markdown("#### 見出し語化の手法による差異")
+        st.markdown(
+            f"spaCy と HanTa で見出し語が異なる語が **{diff[['surface', 'lemma', 'lemma_alt']].drop_duplicates().shape[0]} 種類** ありました。"
+            " 集計には spaCy の結果を使っています。重要な語が含まれていれば、どちらが正しいかを用例で確認してください。"
+        )
+        tbl = diff.groupby(["surface", "lemma", "lemma_alt"]).size().rename("出現回数").reset_index()
+        tbl = tbl.sort_values("出現回数", ascending=False).rename(columns={"surface": "表層形", "lemma": "spaCy", "lemma_alt": "HanTa"})
+        st.dataframe(tbl, width="stretch", hide_index=True, height=400)
+        from ui.components import download_csv
+
+        download_csv(tbl, "lemma_comparison.csv", key="dl_lemma_cmp")

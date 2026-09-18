@@ -80,3 +80,21 @@ languages:
     lemma_unit: "lemma"
     # Unicode 正規化（全角英数→半角など）
     nfkc: true
+
+  en:
+    model: "sm"            # "sm"（同梱）/ "lg"（uv sync --extra large-models）
+    lowercase: true
+    function_pos: [DET, ADP, PRON, AUX, CCONJ, SCONJ, PART, PUNCT, SYM, SPACE]
+
+  de:
+    model: "sm"
+    lowercase: false       # ★ Essen（名詞）と essen（動詞）を統合しないため OFF
+    lemma_mode: "spacy"    # "spacy" / "hanta" / "both"
+    separable_verbs: true  # rufe … an → anrufen
+    compound_split: false  # ★ 造語性が研究対象になり得るため既定 OFF
+    compound_min_score: 0.5      # 分割候補の信頼度がこれ未満なら分けない
+    compound_min_part_len: 3     # 構成要素がこれより短ければ分けない
+    norm_1996: false       # ★ 通時研究の妨げになるため既定 OFF（混在検出時に提案する）
+    norm_ss: false
+    norm_umlaut: false
+    function_pos: [DET, ADP, PRON, AUX, CCONJ, SCONJ, PART, PUNCT, SYM, SPACE]

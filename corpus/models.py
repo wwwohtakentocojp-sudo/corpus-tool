@@ -26,6 +26,10 @@ TOKEN_COLUMNS = [
     "pos",          # 品詞（大分類）
     "pos_detail",   # 品詞（細分類。無ければ pos と同じ）
     "is_function",  # 機能語（既定で除外対象）なら True
+    "dep",          # 係り受けラベル（無い言語では ""）
+    "head",         # 係り先の position（無ければ -1）
+    "lemma_alt",    # 比較用の別手法の見出し語（ドイツ語の HanTa など。無ければ ""）
+    "compound_parts",  # 複合語の構成要素を "+" で連結（分割していなければ ""）
 ]
 
 
@@ -40,6 +44,10 @@ class Token:
     pos_detail: str = ""
     is_function: bool = False
     lemma_label: str = ""   # 空なら lemma と同じ
+    dep: str = ""
+    head: int = -1
+    lemma_alt: str = ""
+    compound_parts: str = ""
 
     @property
     def label(self) -> str:
@@ -88,8 +96,13 @@ def tokens_to_frame(tokens: list[Token]) -> pd.DataFrame:
             "pos": [t.pos for t in tokens],
             "pos_detail": [t.pos_detail for t in tokens],
             "is_function": [t.is_function for t in tokens],
+            "dep": [t.dep for t in tokens],
+            "head": [t.head for t in tokens],
+            "lemma_alt": [t.lemma_alt for t in tokens],
+            "compound_parts": [t.compound_parts for t in tokens],
         }
     )
+    df["head"] = df["head"].astype("int64")
     df["doc_id"] = df["doc_id"].astype("int64")
     df["sentence_id"] = df["sentence_id"].astype("int64")
     df["position"] = df["position"].astype("int64")

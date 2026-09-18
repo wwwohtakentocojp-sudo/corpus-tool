@@ -11,14 +11,21 @@ def _build(code: str, config: dict[str, Any] | None) -> BaseAnalyzer:
         from analyzers.japanese import JapaneseAnalyzer
 
         return JapaneseAnalyzer(config)
-    # Phase 1 で追加: "en" -> EnglishAnalyzer, "de" -> GermanAnalyzer
+    if code == "en":
+        from analyzers.english import EnglishAnalyzer
+
+        return EnglishAnalyzer(config)
+    if code == "de":
+        from analyzers.german import GermanAnalyzer
+
+        return GermanAnalyzer(config)
     raise KeyError(f"未対応の言語コードです: {code}")
 
 
 AVAILABLE_LANGUAGES: dict[str, str] = {
     "ja": "日本語",
-    # "en": "英語",      # Phase 1
-    # "de": "ドイツ語",  # Phase 1
+    "en": "英語",
+    "de": "ドイツ語",
 }
 
 

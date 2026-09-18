@@ -1,118 +1,166 @@
-"""1. データを読み込む（Phase 0: .txt 複数ファイル、またはサンプルデータ）"""
-from __future__ import annotations
+"""1. データを読み込む
 
-from pathlib import Path
+入力: .txt（複数 / zip / フォルダのパス）、CSV / Excel（1行 = 1文書）、サンプルデータ
+読み込み後: サマリ、分析前のデータ量チェック、言語固有の注意、データに対する提案（表記ゆれなど）
+"""
+from __future__ import annotations
 
 import streamlit as st
 
 from analyzers.detect import detect_language
 from analyzers.registry import AVAILABLE_LANGUAGES, get_analyzer
 from app_config import ROOT, thresholds
-from corpus.checks import corpus_summary, pre_analysis_flags
+from corpus.checks import corpus_summary, group_columns, group_sizes, pre_analysis_flags
 from corpus.cleaners import looks_like_aozora
-from corpus.loaders import read_txt_bytes
+from corpus.loaders import (
+    guess_group_columns,
+    guess_text_column,
+    read_folder_txt,
+    read_table,
+    read_txt_bytes,
+    read_zip_txt,
+    table_to_documents,
+)
 from corpus.models import Document
 from corpus.pipeline import build_corpus
 from ui import state
 from ui.components import metric_help, show_flags
 
 st.title("1. データを読み込む")
-st.markdown(
-    "分析したいテキストファイル（.txt）を選んでください。複数まとめて選べます。"
-    " 1ファイルが1文書として扱われます。"
-)
-st.caption("読み込んだテキストは外部に送信されません。CSV / Excel の読み込みは次の段階で追加されます。")
+st.caption("読み込んだテキストは外部に送信されません。すべての処理はこのパソコンの中で行われます。")
 
 settings = state.get_settings()
 cfg = state.config()
 
-# --- 入力元: アップロード、またはサンプル ----------------------------------------
-tab_upload, tab_sample = st.tabs(["自分のファイルを読み込む", "サンプルデータで試す"])
-decoded: list[tuple[str, str, str]] = []
+docs: list[Document] = []
+source_label = ""
 
-with tab_upload:
-    uploaded = st.file_uploader("テキストファイル（.txt）", type=["txt"], accept_multiple_files=True)
-    if uploaded:
-        for f in uploaded:
+tab_txt, tab_table, tab_sample = st.tabs(["テキストファイル（.txt / zip / フォルダ）", "CSV / Excel（1行 = 1文書）", "サンプルデータで試す"])
+
+# ---------------------------------------------------------------------------
+with tab_txt:
+    st.markdown("1ファイルが1文書として扱われます。zip の中の .txt もまとめて読み込みます。")
+    uploaded = st.file_uploader("ファイルを選ぶ（複数可）", type=["txt", "zip"], accept_multiple_files=True)
+    folder = st.text_input("または、フォルダのパスを入力（例: C:\\data\\interviews）", value=st.session_state.get("folder_path", ""))
+    if folder != st.session_state.get("folder_path", ""):
+        st.session_state["folder_path"] = folder
+    decoded: list[tuple[str, str, str]] = []
+    for f in uploaded or []:
+        if f.name.lower().endswith(".zip"):
+            try:
+                decoded.extend(read_zip_txt(f.getvalue()))
+            except Exception:  # noqa: BLE001
+                st.error(f"{f.name} を zip として開けませんでした。zip 形式か確認してください。")
+        else:
             decoded.append(read_txt_bytes(f.name, f.getvalue()))
+    if folder.strip():
+        try:
+            decoded.extend(read_folder_txt(folder.strip()))
+        except FileNotFoundError:
+            st.error("そのフォルダが見つかりません。パスを確認してください。")
+    if decoded:
+        docs = [Document(doc_id=i, name=n, text=t, meta={"encoding": e}) for i, (n, t, e) in enumerate(decoded)]
+        source_label = "テキストファイル"
+        st.dataframe([{"ファイル": n, "文字数": len(t), "文字コード": e} for n, t, e in decoded], width="stretch", hide_index=True)
 
+# ---------------------------------------------------------------------------
+with tab_table:
+    st.markdown("1行を1文書として読み込みます。本文の列と、比較に使うグループ列（年・ジャンル・話者など）を選んでください。")
+    table_file = st.file_uploader("CSV / TSV / Excel", type=["csv", "tsv", "xlsx", "xlsm", "xls"], accept_multiple_files=False)
+    if table_file is not None:
+        try:
+            df = read_table(table_file.name, table_file.getvalue())
+        except Exception as e:  # noqa: BLE001
+            st.error(f"ファイルを表として読めませんでした。CSV は1行目が列名になっている必要があります。（{e}）")
+            df = None
+        if df is not None and len(df):
+            st.dataframe(df.head(5), width="stretch", hide_index=True)
+            st.caption(f"{len(df):,} 行 × {len(df.columns)} 列（先頭5行を表示）")
+            cols = list(df.columns)
+            guess_text = guess_text_column(df)
+            text_col = st.selectbox("本文はどの列ですか", cols, index=cols.index(guess_text) if guess_text in cols else 0)
+            group_default = guess_group_columns(df, text_col)
+            group_cols = st.multiselect(
+                "グループ分けに使う列（複数可・任意）",
+                [c for c in cols if c != text_col],
+                default=group_default,
+                help="年・ジャンル・話者などの列。あとで群間比較や、グループ単位の散らばり計算に使います。",
+            )
+            name_opts = ["（行番号）"] + [c for c in cols if c != text_col]
+            name_col = st.selectbox("文書名に使う列（任意）", name_opts, index=0)
+            docs = table_to_documents(df, text_col, group_cols, None if name_col == "（行番号）" else name_col)
+            docs = [d for d in docs if d.text.strip()]
+            source_label = f"{table_file.name}"
+            if len(docs) < len(df):
+                st.caption(f"本文が空の {len(df) - len(docs)} 行は除きました。")
+
+# ---------------------------------------------------------------------------
 with tab_sample:
     sample_dir = ROOT / "samples"
     sample_files = sorted(sample_dir.glob("*/*.txt")) if sample_dir.exists() else []
+    sample_files = [p for p in sample_files if not p.name.endswith("-words.txt")]
     if not sample_files:
         st.info("サンプルデータがまだありません。プロジェクトのフォルダで `uv run python scripts/download_samples.py` を実行すると用意されます。")
     else:
         chosen = st.multiselect(
-            "サンプル（青空文庫の著作権切れ作品）",
+            "サンプル（青空文庫・Project Gutenberg・Leipzig Corpora）",
             options=sample_files,
-            default=sample_files if not uploaded else [],
+            default=[],
             format_func=lambda p: f"{p.parent.name}/{p.name}",
         )
-        if not uploaded:
-            for p in chosen:
-                decoded.append(read_txt_bytes(p.name, p.read_bytes()))
+        if chosen and not docs:
+            decoded = [read_txt_bytes(p.name, p.read_bytes()) for p in chosen]
+            docs = [Document(doc_id=i, name=n, text=t, meta={"encoding": e}) for i, (n, t, e) in enumerate(decoded)]
+            source_label = "サンプル"
 
-if not decoded:
+# ---------------------------------------------------------------------------
+if not docs:
     corpus = state.get_corpus()
     if corpus is not None:
         st.success(f"現在、{corpus.n_documents} 文書・{corpus.n_tokens:,} 語のデータが読み込まれています。左のメニューから分析に進めます。")
     st.stop()
 
-# --- 文字コードの判定結果 -----------------------------------------------------
-st.markdown("#### 読み込むファイル")
-st.dataframe(
-    [{"ファイル": n, "文字数": len(t), "文字コード": e} for n, t, e in decoded],
-    width="stretch",
-    hide_index=True,
-)
+st.markdown("---")
+st.markdown(f"#### 読み込み設定（{source_label}: {len(docs)} 文書）")
 
-# --- 言語の選択（自動判定は初期値の提案のみ） --------------------------------
-detected = detect_language("\n".join(t[:5000] for _, t, _ in decoded))
+detected = detect_language("\n".join(d.text[:5000] for d in docs[:50]))
 codes = list(AVAILABLE_LANGUAGES.keys())
-default_idx = codes.index(detected) if detected in codes else 0
-if detected not in codes:
-    st.warning(
-        f"このファイルは日本語以外（推定: {detected}）のようです。現在の段階では日本語のみ分析できます。"
-        " 英語・ドイツ語は次の段階で追加されます。"
-    )
 lang = st.selectbox(
     "言語（自動判定の結果を初期値にしています。違っていれば選び直してください）",
     options=codes,
-    index=default_idx,
+    index=codes.index(detected) if detected in codes else 0,
     format_func=lambda c: AVAILABLE_LANGUAGES[c],
 )
 
-# --- 整形オプション ------------------------------------------------------------
-aozora_detected = any(looks_like_aozora(t) for _, t, _ in decoded)
+aozora_detected = any(looks_like_aozora(d.text) for d in docs[:50])
 aozora = st.checkbox(
     "青空文庫の形式（ルビ《》・注記［＃］・底本情報）を取り除く",
     value=aozora_detected,
     help="青空文庫からダウンロードしたファイルには、ルビや編集注記が含まれています。そのまま数えると「《」などが語として数えられてしまいます。",
 )
-if aozora_detected and not aozora:
-    st.info("青空文庫の注記らしきものが見つかりました。取り除かない場合、ルビや記号が語として数えられます。")
 
-# --- 読み込み実行 --------------------------------------------------------------
-if st.button("この内容で読み込む", type="primary"):
-    settings.language = lang
-    settings.cleaning = {"aozora": bool(aozora)}
-    analyzer = get_analyzer(lang, cfg)
-    if not settings.language_options:
-        settings.language_options = analyzer.default_options()
 
-    docs = [Document(doc_id=i, name=n, text=t, meta={"encoding": e}) for i, (n, t, e) in enumerate(decoded)]
-
+def _run_build(docs_: list[Document], settings_) -> None:
     bar = st.progress(0.0, text="解析しています...")
 
     def _progress(i: int, n: int) -> None:
         bar.progress(i / n, text=f"解析しています... {i}/{n} 文書")
 
-    corpus = build_corpus(docs, settings, cfg, progress=_progress)
+    corpus_ = build_corpus(docs_, settings_, cfg, progress=_progress)
     bar.empty()
-    state.set_corpus(corpus, docs)
-    st.session_state["_just_loaded"] = True
+    state.set_corpus(corpus_, docs_)
 
-# --- 読み込み結果のサマリ ------------------------------------------------------
+
+if st.button("この内容で読み込む", type="primary"):
+    if settings.language != lang:
+        settings.language_options = {}
+    settings.language = lang
+    settings.cleaning = {"aozora": bool(aozora)}
+    analyzer = get_analyzer(lang, cfg)
+    settings.language_options = {**analyzer.default_options(), **settings.language_options}
+    _run_build(docs, settings)
+
+# ---------------------------------------------------------------------------
 corpus = state.get_corpus()
 if corpus is not None and corpus.n_tokens > 0:
     st.markdown("---")
@@ -123,20 +171,33 @@ if corpus is not None and corpus.n_tokens > 0:
     metric_help(c2, "延べ語数（token）", summ["n_tokens"], "token_type")
     metric_help(c3, "異なり語数（type）", summ["n_types"], "token_type")
     c4.metric("言語", AVAILABLE_LANGUAGES.get(corpus.language, corpus.language))
-    st.caption(
-        f"機能語（助詞・記号など）を除くと、延べ {summ['n_tokens_content']:,} 語・異なり {summ['n_types_content']:,} 語です。"
-    )
+    st.caption(f"機能語（助詞・冠詞・記号など）を除くと、延べ {summ['n_tokens_content']:,} 語・異なり {summ['n_types_content']:,} 語です。")
 
     st.markdown("#### 分析を始める前の確認")
     flags = pre_analysis_flags(corpus, thresholds(cfg))
     show_flags(flags, empty_message="データ量に大きな問題はありません。左のメニューから分析に進んでください。")
 
     analyzer = get_analyzer(corpus.language, cfg)
+    loaded_docs = state.get_documents()
+    for w in analyzer.data_warnings([d.text for d in loaded_docs], settings.language_options):
+        st.warning(w["message"])
+        if w.get("suggest_option"):
+            if st.button("提案どおりに設定して解析し直す", key=f"suggest_{w['suggest_option']}"):
+                settings.language_options[w["suggest_option"]] = w.get("suggest_value", True)
+                _run_build(loaded_docs, settings)
+                st.rerun()
     for w in analyzer.language_warnings(settings.language_options):
         st.info(w)
 
+    gcols = group_columns(corpus)
+    if gcols:
+        st.markdown("#### グループごとの文書数")
+        for col in gcols:
+            g = group_sizes(corpus, col).rename(columns={col: col, "n_documents": "文書数", "n_tokens": "延べ語数"})
+            st.dataframe(g, width="stretch", hide_index=True)
+
     with st.expander("文書ごとの内訳"):
         per_doc = corpus.tokens.groupby("doc_id").size().rename("延べ語数").reset_index()
-        per_doc = per_doc.merge(corpus.documents[["doc_id", "name", "n_chars"]], on="doc_id")
-        per_doc = per_doc.rename(columns={"name": "文書", "n_chars": "文字数"})[["文書", "文字数", "延べ語数"]]
+        per_doc = per_doc.merge(corpus.documents[["doc_id", "name", "n_chars"] + gcols], on="doc_id")
+        per_doc = per_doc.rename(columns={"name": "文書", "n_chars": "文字数"}).drop(columns=["doc_id"])
         st.dataframe(per_doc, width="stretch", hide_index=True)

@@ -23,6 +23,20 @@ def check_corpus_size(total_tokens: int, thresholds: dict[str, Any]) -> list[Fla
     return []
 
 
+def check_group_imbalance(group_sizes: dict[str, int], thresholds: dict[str, Any]) -> list[Flag]:
+    """グループ間の文書数の偏り。最大/最小の比が group_imbalance_ratio を超えたら警告。"""
+    sizes = {k: int(v) for k, v in group_sizes.items() if int(v) > 0}
+    if len(sizes) < 2:
+        return []
+    th = float(thresholds["group_imbalance_ratio"])
+    big = max(sizes, key=sizes.get)
+    small = min(sizes, key=sizes.get)
+    ratio = sizes[big] / sizes[small]
+    if ratio > th:
+        return [make_flag("GROUP_IMBALANCE", group_a=big, size_a=sizes[big], group_b=small, size_b=sizes[small], ratio=ratio)]
+    return []
+
+
 def check_dp_reliability(n_parts: int, thresholds: dict[str, Any]) -> list[Flag]:
     """分割数（文書数・グループ数）が少なすぎて DP の判定自体が信頼できないか。"""
     th = int(thresholds["dp_min_parts"])

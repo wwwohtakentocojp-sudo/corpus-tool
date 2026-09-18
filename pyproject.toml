@@ -17,6 +17,27 @@ dependencies = [
     # 日本語形態素解析
     "fugashi>=1.4",
     "unidic-lite>=1.0.8",
+    # 英語・ドイツ語（spaCy + 小モデル。大モデルは extra "large-models"）
+    "spacy>=3.8,<3.9",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "de-core-news-sm @ https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.8.0/de_core_news_sm-3.8.0-py3-none-any.whl",
+    # ドイツ語固有: 見出し語化の比較用タガー、複合語分割
+    "HanTa>=1.1",
+    "compound-split>=1.0",
+    # CSV / Excel 読み込み
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+# 精度重視の大モデル（1言語あたり数百MB）: uv sync --extra large-models
+large-models = [
+    "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl",
+    "de-core-news-lg @ https://github.com/explosion/spacy-models/releases/download/de_core_news_lg-3.8.0/de_core_news_lg-3.8.0-py3-none-any.whl",
+]
+# 日本語の係り受け（Phase 2 の係り受けコロケーション用。任意）
+ginza = [
+    "ginza>=5.2",
+    "ja-ginza>=5.2",
 ]
 
 [dependency-groups]

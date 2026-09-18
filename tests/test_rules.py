@@ -7,11 +7,31 @@ from interpretations.rules import (
     check_corpus_size,
     check_dispersion,
     check_dp_reliability,
+    check_group_imbalance,
     check_low_frequency,
     flag_frequency_table,
 )
 
-TH = {"corpus_min_tokens": 10000, "dp_skew": 0.5, "dp_min_freq": 10, "dp_min_parts": 10, "low_freq": 5}
+
+# --- GROUP_IMBALANCE ------------------------------------------------------------
+@pytest.mark.parametrize(
+    "sizes, expected",
+    [
+        ({"a": 300, "b": 100}, False),   # ちょうど 3.0 倍は出さない
+        ({"a": 301, "b": 100}, True),
+        ({"a": 87, "b": 313}, True),     # 指示書の例
+        ({"a": 100}, False),             # 1群だけなら判定しない
+        ({"a": 10, "b": 10, "c": 40}, True),  # 最大/最小で判定
+    ],
+)
+def test_group_imbalance_boundary(sizes, expected):
+    flags = check_group_imbalance(sizes, TH)
+    assert ("GROUP_IMBALANCE" in codes(flags)) is expected
+    if expected:
+        assert "倍" in flags[0].message
+
+TH = {"corpus_min_tokens": 10000, "dp_skew": 0.5, "dp_min_freq": 10, "dp_min_parts": 10, "low_freq": 5,
+      "group_imbalance_ratio": 3.0}
 
 
 def codes(flags):

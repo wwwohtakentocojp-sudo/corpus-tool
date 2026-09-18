@@ -56,6 +56,35 @@ if per_doc["sttr"].isna().any():
     st.caption(f"「—」の文書は {s.sttr_window} 語に満たないため、標準化TTR を計算していません。")
 download_csv(per_doc, "basic_stats_per_document.csv", key="dl_perdoc")
 
+# --- グループごと ---------------------------------------------------------------
+from corpus.checks import group_columns  # noqa: E402
+from stats.basic import per_group_stats  # noqa: E402
+
+gcols = group_columns(corpus)
+if gcols:
+    st.markdown("### グループごと")
+    st.caption("グループ内の文書を連結してから計算します。1文書が短くても、グループ全体が区切り幅以上あれば標準化TTRが出ます。")
+    gcol = st.selectbox("グループ列", gcols, key="stats_group_col")
+    dg = corpus.documents.set_index("doc_id")[gcol]
+    per_group = state.cached(
+        ("per_group", gcol, s.unit, s.include_function_words, s.sttr_window),
+        lambda: per_group_stats(corpus.tokens, dg, s.unit, s.include_function_words, s.sttr_window),
+    )
+    st.dataframe(
+        per_group,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "group": st.column_config.Column(gcol),
+            "n_documents": st.column_config.NumberColumn("文書数", format="%d"),
+            "n_tokens": st.column_config.NumberColumn("延べ語数", format="%d"),
+            "n_types": st.column_config.NumberColumn("異なり語数", format="%d"),
+            "ttr": st.column_config.NumberColumn("TTR（比較には使わない）", format="%.3f"),
+            "sttr": st.column_config.NumberColumn(f"標準化TTR（{s.sttr_window}語単位）", format="%.3f"),
+        },
+    )
+    download_csv(per_group, f"basic_stats_by_{gcol}.csv", key="dl_pergroup")
+
 # --- 品詞構成比 ----------------------------------------------------------------
 st.markdown("### 品詞別の構成比")
 st.caption("構成比は、機能語を含めた全ての語で計算しています（文章が何でできているかを見るため）。")

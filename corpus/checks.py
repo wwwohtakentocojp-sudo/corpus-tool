@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
+
 from corpus.models import Corpus
 from interpretations.flags import Flag
-from interpretations.rules import check_corpus_size
+from interpretations.rules import check_corpus_size, check_group_imbalance
 
 
 def corpus_summary(corpus: Corpus, unit: str = "lemma") -> dict[str, Any]:
@@ -24,8 +26,25 @@ def corpus_summary(corpus: Corpus, unit: str = "lemma") -> dict[str, Any]:
     }
 
 
+def group_columns(corpus: Corpus) -> list[str]:
+    """documents 表のうち、グループ列として使える列（標準列以外）。"""
+    return [c for c in corpus.documents.columns if c not in {"doc_id", "name", "n_chars", "encoding"}]
+
+
+def group_sizes(corpus: Corpus, col: str) -> pd.DataFrame:
+    """グループごとの文書数と延べ語数。"""
+    docs = corpus.documents[["doc_id", col]]
+    tok = corpus.tokens.groupby("doc_id").size().rename("n_tokens")
+    df = docs.merge(tok, left_on="doc_id", right_index=True, how="left").fillna({"n_tokens": 0})
+    g = df.groupby(col).agg(n_documents=("doc_id", "count"), n_tokens=("n_tokens", "sum")).reset_index()
+    g["n_tokens"] = g["n_tokens"].astype(int)
+    return g.sort_values("n_documents", ascending=False).reset_index(drop=True)
+
+
 def pre_analysis_flags(corpus: Corpus, thresholds: dict[str, Any]) -> list[Flag]:
     flags: list[Flag] = []
     flags += check_corpus_size(corpus.n_tokens, thresholds)
-    # Phase 1: GROUP_IMBALANCE をここに追加
+    for col in group_columns(corpus):
+        sizes = group_sizes(corpus, col)
+        flags += check_group_imbalance(dict(zip(sizes[col].astype(str), sizes["n_documents"])), thresholds)
     return flags

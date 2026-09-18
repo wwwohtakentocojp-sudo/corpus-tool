@@ -80,9 +80,23 @@ class BaseAnalyzer(ABC):
                     pos_detail=t.pos_detail,
                     is_function=is_fn,
                     lemma_label=t.lemma_label,
+                    dep=t.dep,
+                    head=t.head,
+                    lemma_alt=t.lemma_alt,
+                    compound_parts=t.compound_parts,
                 )
             )
         return out
+
+    def data_warnings(self, texts: list[str], options: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """読み込んだデータそのものに対する注意（例: 新旧の表記が混在している）。
+        各要素: {"message": str, "suggest_option": key or None, "suggest_value": Any}
+        UI は message を表示し、suggest_option があれば「正規化しますか？」のボタンを出す。"""
+        return []
+
+    def supports_dependency(self) -> bool:
+        """係り受け情報（dep / head 列）を出せるか。"""
+        return False
 
     def default_options(self) -> dict[str, Any]:
         return {o["key"]: o["default"] for o in self.option_schema()}

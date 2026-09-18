@@ -70,6 +70,31 @@ def per_document_stats(tokens: pd.DataFrame, unit: str = "lemma", include_functi
     return pd.DataFrame(rows, columns=["doc_id", "n_tokens", "n_types", "ttr", "sttr"])
 
 
+def per_group_stats(tokens: pd.DataFrame, doc_groups: pd.Series, unit: str = "lemma",
+                    include_function_words: bool = False, sttr_window: int = 1000) -> pd.DataFrame:
+    """グループごとの基本統計。doc_groups は doc_id → グループ値 の Series。
+
+    グループ内の全文書を（文書順に）連結してから標準化TTRを計算するので、
+    1文書が短くてもグループ全体が区切り幅以上あれば値が出る。
+    """
+    sel = select_tokens(tokens, include_function_words)
+    sel = sel.assign(_group=sel["doc_id"].map(doc_groups))
+    rows = []
+    for g, grp in sel.groupby("_group", sort=True, dropna=False):
+        w = grp.sort_values(["doc_id", "position"])[unit]
+        rows.append(
+            {
+                "group": g,
+                "n_documents": int(grp["doc_id"].nunique()),
+                "n_tokens": int(len(w)),
+                "n_types": int(w.nunique()),
+                "ttr": ttr(w),
+                "sttr": standardized_ttr(w, sttr_window),
+            }
+        )
+    return pd.DataFrame(rows, columns=["group", "n_documents", "n_tokens", "n_types", "ttr", "sttr"])
+
+
 def pos_composition(tokens: pd.DataFrame, include_function_words: bool = True) -> pd.DataFrame:
     """品詞別構成比。既定では機能語も含めて全トークンで計算する
     （構成比は「文章がどんな品詞でできているか」を見るものなので除外しない）。"""
