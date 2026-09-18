@@ -5,7 +5,7 @@ import streamlit as st
 
 from analyzers.registry import AVAILABLE_LANGUAGES, get_analyzer
 from corpus.pipeline import build_corpus
-from ui import state
+from ui import demo, state
 
 st.title("2. 前処理の設定")
 st.markdown("語の区切り方・まとめ方に関する設定です。変更したら、下の「この設定で解析し直す」を押してください。")
@@ -15,6 +15,8 @@ cfg = state.config()
 analyzer = get_analyzer(settings.language, cfg)
 
 st.markdown(f"**言語:** {AVAILABLE_LANGUAGES.get(settings.language, settings.language)}")
+if settings.language == "de":
+    demo.german_model_note()
 
 # --- 言語固有オプション ---------------------------------------------------------
 current = {**analyzer.default_options(), **settings.language_options}
@@ -22,6 +24,9 @@ new_opts: dict = {}
 st.markdown("#### 語のまとめ方")
 for opt in analyzer.option_schema():
     key = opt["key"]
+    if key == "model" and demo.is_demo():
+        new_opts[key] = "sm"  # デモ版は sm 固定（lg は公開環境のメモリに載らない）
+        continue
     if opt["type"] == "bool":
         new_opts[key] = st.checkbox(opt["label"], value=bool(current.get(key, opt["default"])), help=opt.get("help"))
     elif opt["type"] == "choice":

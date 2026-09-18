@@ -1,11 +1,13 @@
-# Streamlit の設定
-# ★ 利用統計の外部送信を無効化する（本ツールは一切の外部送信を行わない方針のため）
+# Streamlit の設定（ローカル版・公開デモ版で共通）
+# ★ 利用統計の外部送信を無効化する（ローカル版は一切の外部送信を行わない方針のため）
 [browser]
 gatherUsageStats = false
 
 [server]
-address = "localhost"
-headless = false
+# 待ち受けアドレスはここでは指定しない。
+# ローカル版は start.bat / start.sh が --server.address localhost を付けて起動する。
+# 公開版（Streamlit Community Cloud）は実行環境が待ち受けを決めるため、固定すると起動できない。
+headless = true
 maxUploadSize = 1024
 runOnSave = false
 

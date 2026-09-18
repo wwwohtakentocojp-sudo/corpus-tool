@@ -1,9 +1,22 @@
+# Python / 仮想環境
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-samples/
-!samples/README.md
-exports/
 *.egg-info/
+
+# サンプルデータ（scripts/download_samples.py で取得する。README だけは残す）
+samples/*
+!samples/README.md
+
+# 書き出し・一時ファイル・図
+exports/
 .tmp/
+*.png
+
+# 個人環境の設定（エディタ・Claude Code・秘密情報）
+.claude/
+.vscode/
+.idea/
+.env
+.streamlit/secrets.toml

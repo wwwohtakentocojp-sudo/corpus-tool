@@ -23,11 +23,14 @@ from corpus.loaders import (
 )
 from corpus.models import Document
 from corpus.pipeline import build_corpus
-from ui import state
+from ui import demo, state
 from ui.components import glossary_expander, metric_help, show_flags
 
 st.title("1. データを読み込む")
-st.caption("読み込んだテキストは外部に送信されません。すべての処理はこのパソコンの中で行われます。")
+if demo.is_demo():
+    st.caption("デモ版です。同梱サンプルで機能を体験してください。ご自身の資料はアップロードせず、ローカル版で分析してください。")
+else:
+    st.caption("読み込んだテキストは外部に送信されません。すべての処理はこのパソコンの中で行われます。")
 
 settings = state.get_settings()
 cfg = state.config()
@@ -46,6 +49,8 @@ with tab_txt:
         st.session_state["folder_path"] = folder
     decoded: list[tuple[str, str, str]] = []
     for f in uploaded or []:
+        if not demo.check_upload_size(f.name, f.size):
+            continue
         if f.name.lower().endswith(".zip"):
             try:
                 decoded.extend(read_zip_txt(f.getvalue()))
@@ -67,6 +72,8 @@ with tab_txt:
 with tab_table:
     st.markdown("1行を1文書として読み込みます。本文の列と、比較に使うグループ列（年・ジャンル・話者など）を選んでください。")
     table_file = st.file_uploader("CSV / TSV / Excel", type=["csv", "tsv", "xlsx", "xlsm", "xls"], accept_multiple_files=False)
+    if table_file is not None and not demo.check_upload_size(table_file.name, table_file.size):
+        table_file = None
     if table_file is not None:
         try:
             df = read_table(table_file.name, table_file.getvalue())
@@ -99,6 +106,19 @@ with tab_sample:
     sample_dir = ROOT / "samples"
     sample_files = sorted(sample_dir.glob("*/*.txt")) if sample_dir.exists() else []
     sample_files = [p for p in sample_files if not p.name.endswith("-words.txt")]
+    if not sample_files and demo.is_demo():
+        # 公開環境にはサンプルが同梱されないので、初回に取得する（著作権切れ・CC ライセンスのデータのみ）
+        with st.spinner("サンプルデータを取得しています（初回のみ、1分ほどかかります）..."):
+            from scripts.download_samples import main as download_samples
+
+            try:
+                download_samples(["--lang", "all"])
+            except Exception as e:  # noqa: BLE001
+                st.error(f"サンプルの取得に失敗しました: {e}")
+        sample_files = sorted(sample_dir.glob("*/*.txt")) if sample_dir.exists() else []
+        sample_files = [p for p in sample_files if not p.name.endswith("-words.txt")]
+        if sample_files:
+            st.rerun()
     if not sample_files:
         st.info("サンプルデータがまだありません。プロジェクトのフォルダで `uv run python scripts/download_samples.py` を実行すると用意されます。")
     else:
@@ -131,6 +151,8 @@ lang = st.selectbox(
     index=codes.index(detected) if detected in codes else 0,
     format_func=lambda c: AVAILABLE_LANGUAGES[c],
 )
+if lang == "de":
+    demo.german_model_note()
 
 aozora_detected = any(looks_like_aozora(d.text) for d in docs[:50])
 aozora = st.checkbox(

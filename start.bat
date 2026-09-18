@@ -46,5 +46,5 @@ echo.
 echo ブラウザが自動で開きます。開かない場合は http://localhost:8501 を開いてください。
 echo 終了するにはこのウィンドウを閉じてください。
 echo.
-uv run streamlit run app.py
+uv run streamlit run app.py --server.address localhost --server.headless false
 pause

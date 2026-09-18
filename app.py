@@ -4,6 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from interpretations import glossary
+from ui import demo
 
 st.set_page_config(page_title="コーパス分析ツール", page_icon="📚", layout="wide")
 
@@ -23,11 +24,17 @@ pages = [
 
 nav = st.navigation(pages)
 
+demo.banner()
+
 with st.sidebar:
     st.markdown("---")
-    st.caption(
-        "このツールは読み込んだテキストを外部に送信しません。"
-        "すべての処理はこのパソコンの中で行われます。"
-    )
+    if demo.is_demo():
+        st.caption("デモ版: アップロードしたファイルはサーバーを経由します。同梱サンプルでの体験用です。")
+    else:
+        st.caption(
+            "このツールは読み込んだテキストを外部に送信しません。"
+            "すべての処理はこのパソコンの中で行われます。"
+        )
+demo.sidebar_links()
 
 nav.run()
