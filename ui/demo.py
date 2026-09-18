@@ -17,7 +17,7 @@ import os
 import streamlit as st
 
 # 公開時に置き換える。環境変数 REPO_URL で上書きできる
-DEFAULT_REPO_URL = "https://github.com/<your-account>/corpus-tool"
+DEFAULT_REPO_URL = "https://github.com/wwwohtakentocojp-sudo/corpus-tool"
 
 
 def _env(name: str, default: str = "") -> str:

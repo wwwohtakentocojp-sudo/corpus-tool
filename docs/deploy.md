@@ -24,11 +24,11 @@ git branch backup-before-rebase
 author を設定します（`<...>` は自分の値に置き換える）。
 
 ```bash
-git config user.name "<GitHub のユーザー名>"
+git config user.name "wwwohtakentocojp-sudo"
 ```
 
 ```bash
-git config user.email "<ID>+<ユーザー名>@users.noreply.github.com"
+git config user.email "296031518+wwwohtakentocojp-sudo@users.noreply.github.com"
 ```
 
 全コミットの author を書き換えます。
@@ -64,7 +64,7 @@ git branch -D backup-before-rebase
 GitHub で作った公開リポジトリの URL を使います（README や .gitignore を GitHub 側で追加していないこと）。
 
 ```bash
-git remote add origin https://github.com/<ユーザー名>/<リポジトリ名>.git
+git remote add origin https://github.com/wwwohtakentocojp-sudo/corpus-tool.git
 ```
 
 ```bash
@@ -78,7 +78,7 @@ push 後、GitHub のページで `samples/demo/` と `requirements.txt` が含�
 1. https://share.streamlit.io を開き、GitHub アカウントでサインインする
 2. 「Create app」→「Deploy a public app from GitHub」
 3. 次を指定する
-   - Repository: `<ユーザー名>/<リポジトリ名>`
+   - Repository: `wwwohtakentocojp-sudo/corpus-tool`
    - Branch: `main`
    - Main file path: `app.py`
    - App URL: 好きなサブドメイン（あとで変更可）
@@ -89,7 +89,7 @@ push 後、GitHub のページで `samples/demo/` と `requirements.txt` が含�
    ```toml
    DEMO_MODE = "true"
    DEMO_MAX_UPLOAD_MB = "5"
-   REPO_URL = "https://github.com/<ユーザー名>/<リポジトリ名>"
+   REPO_URL = "https://github.com/wwwohtakentocojp-sudo/corpus-tool"
    ```
 
 5. 「Deploy」を押す。初回は依存関係の導入に 5〜10 分かかる
