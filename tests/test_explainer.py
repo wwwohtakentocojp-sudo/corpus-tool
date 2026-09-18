@@ -55,17 +55,25 @@ def test_disagreement_not_repeated_when_both_high_flag_present():
 
 
 def test_flag_rows_only_and_no_generic_cautions():
-    flags = [make_flag("MI_HIGH_LOW_FREQ", mi=9.8, cooccur=12, threshold=20)]
+    flags = [make_flag("LOW_COOCCURRENCE", cooccur=12, threshold=20, mi_note="特に珍しさ重視の指標（MI = 9.8）が高く出ていますが、これは回数が少ないときに起こりやすい現象です。")]
     secs = dict(explain_sections(_colloc(flags), TH))
     assert secs[H_DONT] == [flags[0].message]           # フラグ由来の行だけ
     assert len(secs[H_NEXT]) == 1 and "KWIC" in secs[H_NEXT][0] and "12 件" in secs[H_NEXT][0]
-    assert "傾向と呼ぶには回数が足りません" in secs[H_FACT][0]
+    assert "指標の値自体が安定しません" in secs[H_FACT][0]
     text = explain(_colloc(flags), TH)
     assert "過大評価" not in text  # 用語辞書の一般的注意は出さない
 
 
+def test_table_only_flag_is_not_explained():
+    flags = [make_flag("LOW_COOCCURRENCE_MINOR", cooccur=2)]
+    secs = dict(explain_sections(_colloc(flags), TH))
+    assert H_DONT not in secs and H_NEXT not in secs
+    assert "一緒に出ており" in secs[H_FACT][0]  # フラグ無し扱いで水準文になる
+    assert "少ない" not in explain(_colloc(flags), TH)
+
+
 def test_different_flags_give_different_dont_sections():
-    a = dict(explain_sections(_colloc([make_flag("MI_HIGH_LOW_FREQ", mi=9.8, cooccur=12, threshold=20)]), TH))
+    a = dict(explain_sections(_colloc([make_flag("LOW_COOCCURRENCE", cooccur=12, threshold=20, mi_note="")]), TH))
     b = dict(explain_sections(_colloc([make_flag("BOTH_HIGH_FREQUENCY", freq_node=644, freq_collocate=2721, top_percent=1.0)]), TH))
     assert a[H_DONT] != b[H_DONT] and a[H_NEXT] != b[H_NEXT] and a[H_FACT] != b[H_FACT]
 
@@ -99,7 +107,7 @@ def test_fact_section_at_most_two_sentences():
     flags = [
         make_flag("BOTH_HIGH_FREQUENCY", freq_node=644, freq_collocate=2721, top_percent=1.0),
         make_flag("T_ONLY_FUNCTION_WORD", t=5.97, mi=0.57),
-        make_flag("MI_HIGH_LOW_FREQ", mi=9.8, cooccur=12, threshold=20),
+        make_flag("LOW_COOCCURRENCE", cooccur=12, threshold=20, mi_note=""),
     ]
     secs = dict(explain_sections(_colloc(flags), TH))
     assert len(secs[H_FACT]) == 2

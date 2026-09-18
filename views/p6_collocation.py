@@ -78,8 +78,10 @@ st.markdown(
 
 def _flag_label(flags: list[str]) -> str:
     marks = []
-    if "MI_HIGH_LOW_FREQ" in flags:
-        marks.append("⚠ 低頻度・要用例")
+    if "LOW_COOCCURRENCE" in flags:
+        marks.append("⚠ 回数少・要用例")
+    if "LOW_COOCCURRENCE_MINOR" in flags:
+        marks.append("回数少")
     if "BOTH_HIGH_FREQUENCY" in flags:
         marks.append("△ 双方が高頻度")
     if "NOT_DISTINGUISHABLE" in flags:
@@ -113,7 +115,7 @@ event = st.dataframe(
         "mi": st.column_config.NumberColumn("珍しさ重視（MI）", format="%.2f", help=glossary.tooltip("mi_score")),
         "t": st.column_config.NumberColumn("安定性（Tスコア）", format="%.2f", help=glossary.tooltip("t_score")),
         "g2": st.column_config.NumberColumn("偶然でない度合い（G²）", format="%.1f", help=glossary.tooltip("log_likelihood")),
-        "注意": st.column_config.Column("注意", help="⚠ 低頻度・要用例: MIが高いが回数が少ない。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語: どこにでも出る語による見かけの共起。？ 判断つかず: 偶然かどうかを区別できる回数に達していない（結びつきがないという意味ではない）。"),
+        "注意": st.column_config.Column("注意", help="⚠ 回数少・要用例: 指標は目安を超えているが回数が少なく、値が安定しない。回数少: 回数が少なく指標も目安未満。△ 双方が高頻度: どちらもよく出る語なので logDice が高くても特別な結びつきではない。△ 高頻度語: どこにでも出る語による見かけの共起。？ 判断つかず: 偶然かどうかを区別できる回数に達していない（結びつきがないという意味ではない）。"),
     },
 )
 
@@ -142,19 +144,20 @@ export = shown.rename(columns={"collocate": "集計キー", "label": "共起語"
 download_csv(export, f"collocation_{node}_{method}.csv", key="dl_colloc")
 
 # --- 用例確認が必要な組み合わせ（フラグ → KWIC の導線） ------------------------------
-need_check = view[view["flags"].map(lambda f: "MI_HIGH_LOW_FREQ" in f)]
+need_check = view[view["flags"].map(lambda f: "LOW_COOCCURRENCE" in f)]
 st.markdown("### 用例の確認が必要な組み合わせ")
 if len(need_check) == 0:
-    st.success("結びつきが強く見えるのに回数が少ない組み合わせはありません。")
+    st.success("指標は目安を超えているのに回数が少ない組み合わせはありません。")
 else:
     st.markdown(
-        f"結びつきの強さ・珍しさ重視（MIスコア）が高いのに、一緒に出た回数が {th['mi_min_cooccur']} 回未満の組み合わせが **{len(need_check)} 組** あります。"
-        " 用例を確認せずに論文に書くのは危険です。各行のボタンから用例を確認してください。"
+        f"指標（logDice・MI・G²）のいずれかが目安を超えているのに、一緒に出た回数が {th['low_cooccur_threshold']} 回未満の組み合わせが **{len(need_check)} 組** あります。"
+        " この回数では指標の値自体が安定しません。用例を確認せずに論文に書くのは危険です。各行のボタンから用例を確認してください。"
     )
     for i, r in enumerate(need_check.head(10).itertuples()):
         cA, cB = st.columns([5, 2])
         with cA:
-            show_flags([make_flag("MI_HIGH_LOW_FREQ", mi=float(r.mi), cooccur=int(r.cooccur), threshold=int(th["mi_min_cooccur"]))])
+            mi_note = f"特に珍しさ重視の指標（MI = {r.mi:.1f}）が高く出ていますが、これは回数が少ないときに起こりやすい現象です。" if r.mi > float(th["mi_high"]) else ""
+            show_flags([make_flag("LOW_COOCCURRENCE", cooccur=int(r.cooccur), threshold=int(th["low_cooccur_threshold"]), mi_note=mi_note)])
         with cB:
             st.write("")
             if st.button(f"『{r.label}』の用例を確認 →", key=f"kwic_flag_{i}"):

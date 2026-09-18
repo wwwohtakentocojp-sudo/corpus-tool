@@ -54,10 +54,14 @@ FLAG_TEXTS: dict[str, tuple[str, str]] = {
         "グループ「{group_a}」が {size_a:,} 文書、「{group_b}」が {size_b:,} 文書で、"
         "文書数に {ratio:.1f} 倍の偏りがあります。文書数の偏りにより結果が歪む可能性があります。",
     ),
-    "MI_HIGH_LOW_FREQ": (
+    "LOW_COOCCURRENCE": (
         WARNING,
-        "MIスコアは高い（{mi:.1f}）ですが、一緒に出た回数が {cooccur} 回しかありません。"
-        "回数が {threshold} 回未満の組み合わせは、用例を全て自分の目で確認してから扱ってください。",
+        "一緒に出た回数が {cooccur} 回しかありません。指標の値は目安を超えていますが、この回数ではその値自体が安定しません。"
+        "論文に書く前に、用例を全件確認してください。{mi_note}",
+    ),
+    "LOW_COOCCURRENCE_MINOR": (
+        INFO,
+        "一緒に出た回数が {cooccur} 回と少ない組み合わせです。",
     ),
     "BOTH_HIGH_FREQUENCY": (
         WARNING,

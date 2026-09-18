@@ -39,14 +39,32 @@ def test_both_high_frequency_boundary(fn, fc, cutoff, expected):
         assert "1%" in flags[0].message
 
 
-# --- MI_HIGH_LOW_FREQ ------------------------------------------------------------
+# --- LOW_COOCCURRENCE（段階A / 段階B） ---------------------------------------------
 @pytest.mark.parametrize(
-    "mi, cooccur, expected",
-    [(5.0, 19, False), (5.01, 19, True), (5.01, 20, False), (9.8, 12, True), (float("nan"), 3, False)],
+    "cooccur, mi, log_dice, g2, expected",
+    [
+        (19, 3.0, 0.0, 0.0, "A"),       # 回数少 + MI が目安以上
+        (19, 0.0, 7.0, 0.0, "A"),       # 回数少 + logDice が目安以上
+        (19, 0.0, 0.0, 6.63, "A"),      # 回数少 + G² が目安以上
+        (19, 2.9, 6.9, 6.62, "B"),      # 回数少 + どれも目安未満
+        (20, 9.0, 12.0, 100.0, None),   # 回数が閾値ちょうどなら出さない
+        (16, 3.67, 9.64, 79.4, "A"),    # サンプル7（『先生』×『嘗て』）
+        (3, 4.9, 7.25, 14.9, "A"),      # 旧 MI_HIGH_LOW_FREQ では漏れていた MI 4.9 の例
+    ],
 )
-def test_mi_high_low_freq_boundary(mi, cooccur, expected):
-    flags = check_collocation_row(mi, 0.0, cooccur, False, True, TH)
-    assert ("MI_HIGH_LOW_FREQ" in codes(flags)) is expected
+def test_low_cooccurrence_stages(cooccur, mi, log_dice, g2, expected):
+    flags = check_collocation_row(mi, 0.0, cooccur, False, True, TH, g2=g2, log_dice=log_dice)
+    c = codes(flags)
+    assert ("LOW_COOCCURRENCE" in c) is (expected == "A")
+    assert ("LOW_COOCCURRENCE_MINOR" in c) is (expected == "B")
+    assert not ("LOW_COOCCURRENCE" in c and "LOW_COOCCURRENCE_MINOR" in c)  # 重複しない
+
+
+def test_low_cooccurrence_mi_note_only_when_mi_high():
+    with_note = next(f for f in check_collocation_row(5.2, 0.0, 3, False, True, TH, g2=14.9, log_dice=7.25) if f.code == "LOW_COOCCURRENCE")
+    assert "MI = 5.2" in with_note.message and "回数が少ないときに起こりやすい" in with_note.message
+    no_note = next(f for f in check_collocation_row(3.67, 0.0, 16, False, True, TH, g2=79.4, log_dice=9.64) if f.code == "LOW_COOCCURRENCE")
+    assert "起こりやすい" not in no_note.message and no_note.message.endswith("確認してください。")
 
 
 # --- T_ONLY_FUNCTION_WORD -------------------------------------------------------
@@ -76,11 +94,12 @@ def test_effect_size_boundary(lr, expected):
 
 
 def test_vectorized_collocation_and_keyness_flags_match_scalar():
-    col = pd.DataFrame({"mi": [6.0, 1.0, 0.4], "t": [1.0, 5.0, 1.0], "cooccur": [3, 50, 23], "is_function": [False, True, False],
-                        "freq_node": [600, 600, 600], "freq_collocate": [3, 2000, 64], "g2": [14.9, 51.8, 1.4]})
+    col = pd.DataFrame({"mi": [6.0, 1.0, 0.4, 0.5], "t": [1.0, 5.0, 1.0, 0.5], "cooccur": [3, 50, 23, 2], "is_function": [False, True, False, False],
+                        "freq_node": [600, 600, 600, 600], "freq_collocate": [3, 2000, 64, 5], "g2": [14.9, 51.8, 1.4, 0.3],
+                        "log_dice": [7.25, 11.68, 9.78, 4.0]})
     out = flag_collocation_table(col, TH, include_function_words=False, high_freq_cutoff=100)
-    assert out["flags"].tolist() == [["MI_HIGH_LOW_FREQ"], ["BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "FUNCTION_WORD_NOISE"],
-                                     ["NOT_DISTINGUISHABLE"]]
+    assert out["flags"].tolist() == [["LOW_COOCCURRENCE"], ["BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "FUNCTION_WORD_NOISE"],
+                                     ["NOT_DISTINGUISHABLE"], ["LOW_COOCCURRENCE_MINOR", "NOT_DISTINGUISHABLE"]]
     key = pd.DataFrame({"word": ["a", "b", "c"], "log_ratio": [0.5, 2.0, 6.0], "zero_corrected": [False, False, True]})
     assert flag_keyness_table(key, TH)["flags"].tolist() == [["EFFECT_SIZE_TOO_SMALL"], [], ["ZERO_CORRECTED"]]
     assert "0.5" in check_keyness_row(6.0, TH, "c", zero_corrected=True)[0].message
@@ -104,14 +123,15 @@ def test_group_imbalance_boundary(sizes, expected):
         assert "倍" in flags[0].message
 
 TH = {"corpus_min_tokens": 10000, "dp_skew": 0.5, "dp_min_freq": 10, "dp_min_parts": 10, "low_freq": 5,
-      "group_imbalance_ratio": 3.0, "mi_high": 5.0, "mi_min_cooccur": 20, "t_high": 2.0, "mi_low": 3.0,
-      "log_ratio_min": 1.0, "high_freq_top_ratio": 0.01, "g2_significant": 6.63}
+      "group_imbalance_ratio": 3.0, "mi_high": 5.0, "low_cooccur_threshold": 20, "t_high": 2.0, "mi_low": 3.0,
+      "log_ratio_min": 1.0, "high_freq_top_ratio": 0.01, "g2_significant": 6.63, "log_dice_strong": 7.0,
+      "mi_meaningful": 3.0}
 
 
 # --- NOT_DISTINGUISHABLE ---------------------------------------------------------
 @pytest.mark.parametrize("g2, expected", [(6.62, True), (6.63, False), (1.4, True), (None, False), (float("nan"), False)])
 def test_not_distinguishable_boundary(g2, expected):
-    flags = check_collocation_row(1.0, 1.0, 50, False, True, TH, g2=g2)
+    flags = check_collocation_row(1.0, 1.0, 50, False, True, TH, g2=g2, log_dice=1.0)
     assert ("NOT_DISTINGUISHABLE" in codes(flags)) is expected
     if expected:
         msg = flags[0].message

@@ -82,7 +82,7 @@ def _render(template: str, inp: ExplainInput, flag: Flag | None = None) -> str:
 JUDGMENTS: dict[str, str] = {
     "BOTH_HIGH_FREQUENCY": "『{WORD}』と『{COLLOCATE}』はどちらも非常によく使われる語です。結びつきの強さ・総合（logDice）が {log_dice} と高いのは両方がよく出る語だからで、特別な結びつきとは言えません。",
     "T_ONLY_FUNCTION_WORD": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、珍しさ重視の結びつき（MIスコア）は {mi} と低く、『{COLLOCATE}』がどこにでも出る語であるために並んでいるだけです。",
-    "MI_HIGH_LOW_FREQ": "『{WORD}』と『{COLLOCATE}』は珍しさ重視の結びつき（MIスコア）が {mi} と高い一方、一緒に出た回数は {cooccur} 回だけです。傾向と呼ぶには回数が足りません。",
+    "LOW_COOCCURRENCE": "『{WORD}』と『{COLLOCATE}』は指標の上では結びつきがありそうに見えますが（logDice = {log_dice}、MI = {mi}）、一緒に出た回数が {cooccur} 回しかなく、この回数では指標の値自体が安定しません。",
     "NOT_DISTINGUISHABLE": "『{WORD}』と『{COLLOCATE}』は {cooccur} 回一緒に出ていますが、偶然では説明しにくい度合い（G²）は {g2} で目安の {threshold} に達しておらず、偶然そうなったのかどうかを今のデータでは区別できません。",
     "FUNCTION_WORD_NOISE": "『{COLLOCATE}』は機能語（助詞・冠詞など）で、内容の分析では読み飛ばす行です。",
     "DP_TOO_FEW_PARTS": "『{WORD}』は {freq} 回出現しています。文書数が {n_parts} と少ないため、散らばり具合（分散度DP）= {dp} は参考値にとどまります。",
@@ -96,7 +96,7 @@ JUDGMENTS: dict[str, str] = {
 
 # フラグ → 次に確認すべきこと
 NEXT_STEPS: dict[str, str] = {
-    "MI_HIGH_LOW_FREQ": "『{WORD}』と『{COLLOCATE}』の用例を、KWIC 画面で全件（{cooccur} 件）確認してください。",
+    "LOW_COOCCURRENCE": "『{WORD}』と『{COLLOCATE}』の用例を、KWIC 画面で全件（{cooccur} 件）確認してください。",
     "NOT_DISTINGUISHABLE": "この組み合わせについては結論を出さず、データを増やすか、別の組み合わせを検討してください。",
     "BOTH_HIGH_FREQUENCY": "この組み合わせは発見として扱わず、logDice が高く、かつ共起語の出現回数が際立って多くはない組み合わせを探してください。",
     "T_ONLY_FUNCTION_WORD": "『{COLLOCATE}』が機能語なら、集計設定で機能語を除外してください。内容語なら、この行は読み飛ばしてください。",
@@ -111,9 +111,12 @@ NEXT_STEPS: dict[str, str] = {
 }
 
 # 判定文を出す順（重要なものを先に）
-_ORDER = ["CORPUS_TOO_SMALL", "GROUP_IMBALANCE", "BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "MI_HIGH_LOW_FREQ",
+_ORDER = ["CORPUS_TOO_SMALL", "GROUP_IMBALANCE", "BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD", "LOW_COOCCURRENCE",
           "NOT_DISTINGUISHABLE", "FUNCTION_WORD_NOISE", "DP_TOO_FEW_PARTS", "DISPERSION_SKEWED", "LOW_FREQUENCY",
           "ZERO_CORRECTED", "EFFECT_SIZE_TOO_SMALL"]
+
+# 表の注意列にだけ出し、解説文には出さないフラグ（弱い注記）
+TABLE_ONLY = {"LOW_COOCCURRENCE_MINOR"}
 
 # 「よく使われる語どうし」の趣旨を既に述べるフラグ。これらがあれば食い違いの文は重複するので出さない
 _ALREADY_EXPLAINS_DISAGREEMENT = {"BOTH_HIGH_FREQUENCY", "T_ONLY_FUNCTION_WORD"}
@@ -227,7 +230,7 @@ def _augment_words(inp: ExplainInput) -> ExplainInput:
 def explain_sections(inp: ExplainInput, thresholds: dict[str, Any]) -> list[tuple[str, list[str]]]:
     """(見出し, 行のリスト) の並び。空になる見出しは含めない。"""
     inp = _augment_words(inp)
-    flags = _sorted_flags(inp.flags)
+    flags = _sorted_flags([f for f in inp.flags if f.code not in TABLE_ONLY])
     codes = {f.code for f in flags}
     sections: list[tuple[str, list[str]]] = []
 

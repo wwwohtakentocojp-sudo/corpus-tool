@@ -50,10 +50,10 @@ def sample_collocation(corpus: Corpus, node: str, pick: str | None, th) -> tuple
 
     def flags_of(r):
         return check_collocation_row(r["mi"], r["t"], int(r["cooccur"]), bool(r["is_function"]), False, th,
-                                     int(r["freq_node"]), int(r["freq_collocate"]), cutoff, float(r["g2"]))
+                                     int(r["freq_node"]), int(r["freq_collocate"]), cutoff, float(r["g2"]), float(r["log_dice"]))
 
     if pick == "flagged":
-        row = next(r for _, r in tbl.iterrows() if any(f.code == "MI_HIGH_LOW_FREQ" for f in flags_of(r)))
+        row = next(r for _, r in tbl.iterrows() if any(f.code == "LOW_COOCCURRENCE" for f in flags_of(r)) and r["mi"] > th["mi_high"])
     elif pick == "disagree":
         # logDice は目安以上だが MI が偶然に近い（指標が食い違う）組
         row = next(r for _, r in tbl.iterrows() if r["log_dice"] >= th["log_dice_strong"] and r["mi"] < th["mi_meaningful"]
@@ -64,6 +64,13 @@ def sample_collocation(corpus: Corpus, node: str, pick: str | None, th) -> tuple
                  and r["mi"] >= th["mi_meaningful"] and r["g2"] >= th["g2_significant"]]
         if not cands:
             raise LookupError(f"『{node}』には、フラグ無しで3指標すべてが目安以上の共起語がありません")
+        row = cands[0]
+    elif pick == "nearest":
+        # フラグ無しに最も近い組: 回数 >= 閾値で、logDice・MI が目安以上のものを cooccur 降順で
+        cands = [r for _, r in tbl.iterrows() if r["cooccur"] >= th["low_cooccur_threshold"]]
+        cands.sort(key=lambda r: (-(r["mi"] >= th["mi_meaningful"]), -(r["log_dice"] >= th["log_dice_strong"]), -r["mi"]))
+        if not cands:
+            raise LookupError("none")
         row = cands[0]
     elif pick:
         row = tbl[tbl["label"] == pick].iloc[0]
@@ -124,19 +131,27 @@ def main() -> int:
         sample_keyness(corpus, "俺", "夏目漱石", th),
         sample_keyness(corpus, "下人", "芥川龍之介", th),
         sample_collocation(corpus, "先生", "disagree", th),  # 指標が食い違う組（NOT_DISTINGUISHABLE が立つ想定）
+        sample_collocation(corpus, "先生", "嘗て", th),      # サンプル 7: 共起 16 回（段階A が立つ想定）
     ]
-    # サンプル 7: フラグ無しで 3 指標すべてが目安以上の組を、いくつかの中心語から探す
+    # サンプル 8: フラグ無しで 3 指標すべてが目安以上の組を、複数の中心語から探す
+    nodes = ["先生", "奥さん", "手紙", "赤シャツ", "山嵐", "下人", "老婆", "母", "父", "叔父", "友達", "病気", "死ぬ",
+             "結婚", "自分", "心", "東京", "学校", "家", "金", "言う", "見る", "聞く", "思う", "帰る", "書く"]
     found = None
-    for node in ["先生", "奥さん", "手紙", "赤シャツ", "山嵐", "下人", "老婆", "母", "父", "叔父", "友達", "病気", "死ぬ"]:
+    for node in nodes:
         try:
             found = sample_collocation(corpus, node, "clean", th)
             break
-        except (LookupError, StopIteration, IndexError):
+        except (LookupError, StopIteration, IndexError, KeyError):
             continue
     if found:
         samples.append(found)
     else:
-        print("サンプル 7: フラグ無しで 3 指標すべてが目安以上の組み合わせは、探索した中心語の範囲では見つかりませんでした。\n")
+        print(f"サンプル 8: フラグ無しで 3 指標すべてが目安以上の組み合わせは、探索した中心語 {len(nodes)} 語の範囲では見つかりませんでした。")
+        try:
+            samples.append(sample_collocation(corpus, "先生", "nearest", th))
+            print("最も条件に近かった組み合わせを代わりに示します。\n")
+        except LookupError:
+            pass
     for i, (inp, title) in enumerate(samples, 1):
         print("=" * 78)
         print(f"サンプル {i}: {title}")
