@@ -50,6 +50,28 @@ def show_flags(flags: Iterable[Flag], empty_message: str | None = None) -> None:
             st.info(f.message)
 
 
+def explanation_panel(inp, thresholds: dict, title: str | None = None) -> None:
+    """explainer の出力を画面に描く。
+    【この数字が言っていること】は本文、【論文に書くなら】はコピーできる枠、
+    【言ってはいけないこと】は警告色、【次に確認すべきこと】は情報色で出す。
+    フラグが無ければ後ろ2つの見出しは出ない（explainer 側の仕様）。"""
+    from interpretations.explainer import H_DONT, H_FACT, H_NEXT, H_PAPER, explain_sections
+
+    with st.container(border=True):
+        if title:
+            st.markdown(f"**{title}**")
+        for heading, lines in explain_sections(inp, thresholds):
+            st.markdown(f"**{heading}**")
+            if heading == H_PAPER:
+                st.code("\n".join(lines), language=None, wrap_lines=True)
+            elif heading == H_DONT:
+                st.warning("\n\n".join(f"- {ln}" for ln in lines) if len(lines) > 1 else lines[0])
+            elif heading == H_NEXT:
+                st.info("\n\n".join(f"- {ln}" for ln in lines) if len(lines) > 1 else lines[0])
+            else:
+                st.markdown("\n\n".join(lines) if len(lines) == 1 else "\n".join(f"- {ln}" for ln in lines))
+
+
 def csv_bytes(df: pd.DataFrame) -> bytes:
     """Excel で開いても文字化けしない UTF-8 (BOM 付き)。"""
     return df.to_csv(index=False).encode("utf-8-sig")

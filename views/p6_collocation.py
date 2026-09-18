@@ -9,11 +9,12 @@ from analyzers.registry import get_analyzer
 from app_config import thresholds
 from interpretations import glossary
 from interpretations.flags import make_flag
-from interpretations.rules import flag_collocation_table, high_frequency_cutoff
+from interpretations.explainer import ExplainInput
+from interpretations.rules import check_collocation_row, flag_collocation_table, high_frequency_cutoff
 from stats.collocation import DEFAULT_METHOD, METHOD_REASON, METHODS, collocation_table
 from stats.network import build_network, network_html
 from ui import state
-from ui.components import download_csv, glossary_expander, show_flags
+from ui.components import download_csv, explanation_panel, glossary_expander, show_flags
 
 st.title("6. コロケーション分析")
 corpus = state.require_corpus()
@@ -132,11 +133,22 @@ def _goto_kwic(collocate_key: str) -> None:
 sel_rows = event.selection.rows if event and event.selection else []
 if sel_rows:
     r = view.iloc[sel_rows[0]]
-    st.markdown(f"選択中: **{r['label']}**（一緒に出た回数 {int(r['cooccur'])} 回）")
+    row_flags = check_collocation_row(
+        float(r["mi"]), float(r["t"]), int(r["cooccur"]), bool(r["is_function"]), s.include_function_words, th,
+        int(r["freq_node"]), int(r["freq_collocate"]), hf_cutoff, float(r["g2"]), float(r["log_dice"]),
+    )
+    inp = ExplainInput(
+        screen="collocation",
+        metrics={"cooccur": int(r["cooccur"]), "freq_node": int(r["freq_node"]), "freq_collocate": int(r["freq_collocate"]),
+                 "mi": float(r["mi"]), "t": float(r["t"]), "log_dice": float(r["log_dice"]), "g2": float(r["g2"]), "p": float(r["p"]),
+                 "n_total": corpus.n_tokens},
+        flags=row_flags, words={"WORD": node, "COLLOCATE": str(r["label"])}, settings={"window_label": window_label},
+    )
+    explanation_panel(inp, th, title=f"『{node}』と『{r['label']}』の読み方")
     if st.button(f"『{node}』と『{r['label']}』の用例を KWIC で見る →", type="primary", key="kwic_selected"):
         _goto_kwic(str(r["collocate"]))
 else:
-    st.caption("表の行を選ぶと、その組み合わせの用例を KWIC 画面で確認できます。")
+    st.caption("表の行を選ぶと、その組み合わせの読み方（解説）と、用例を KWIC 画面で確認するボタンが出ます。")
 
 export = shown.rename(columns={"collocate": "集計キー", "label": "共起語", "pos": "品詞", "relation": "関係", "cooccur": "共起頻度",
                                "freq_node": "中心語頻度", "freq_collocate": "共起語頻度", "expected": "期待値", "mi": "MI",

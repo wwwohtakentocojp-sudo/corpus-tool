@@ -9,10 +9,11 @@ from app_config import thresholds
 from corpus.checks import group_columns
 from interpretations import glossary
 from interpretations.flags import make_flag
-from interpretations.rules import check_dp_reliability, flag_frequency_table
+from interpretations.explainer import ExplainInput
+from interpretations.rules import check_dispersion, check_dp_reliability, check_low_frequency, flag_frequency_table
 from stats.frequency import expand_compounds, frequency_table, tokens_with_parts, word_distribution
 from ui import state
-from ui.components import download_csv, glossary_expander, plotly_config, png_hint, show_flags
+from ui.components import download_csv, explanation_panel, glossary_expander, plotly_config, png_hint, show_flags
 
 st.title("4. 頻度分析")
 corpus = state.require_corpus()
@@ -52,7 +53,8 @@ def _flag_label(flags: list[str]) -> str:
     return " ".join(marks)
 
 
-def render_table(freq_df: pd.DataFrame, key: str) -> None:
+def render_table(freq_df: pd.DataFrame, key: str) -> str | None:
+    """表を描き、選択された行の集計キーを返す（未選択なら None）。"""
     c1, c2, c3, c4 = st.columns([2, 2, 3, 2])
     min_freq = c1.number_input("出現回数がこれ以上", min_value=1, value=1, step=1, key=f"minf_{key}")
     pos_options = ["（すべて）"] + sorted(freq_df["pos"].dropna().unique().tolist())
@@ -75,11 +77,14 @@ def render_table(freq_df: pd.DataFrame, key: str) -> None:
     st.markdown(f"**{len(view):,} 語**（全 {len(freq_df):,} 語のうち）")
     if dup_labels and not show_key:
         st.caption(f"表示名が同じ行が {dup_labels} 行あります。意味の違う同形の語を別々に数えているためです。「集計キーを表示」を ON にすると区別が見えます。")
-    st.dataframe(
+    event = st.dataframe(
         shown,
         width="stretch",
         hide_index=True,
         height=520,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"table_{key}",
         column_config={
             "rank": st.column_config.NumberColumn("順位", format="%d"),
             "label": st.column_config.Column("語", help=glossary.tooltip("lemma_key")),
@@ -98,14 +103,17 @@ def render_table(freq_df: pd.DataFrame, key: str) -> None:
         columns={"rank": "順位", "label": "語", "word": "集計キー", "pos": "品詞", "freq": "出現回数", "pmw": "pmw", "dp": "分散度DP", "n_parts": "出現数（単位別）"}
     )
     download_csv(export, f"frequency_table_{key}.csv", key=f"dl_{key}")
+    rows = event.selection.rows if event and event.selection else []
+    return str(view.iloc[rows[0]]["word"]) if rows else None
 
 
 freq_df = state.cached(("freq", s.unit, s.include_function_words, part_col), lambda: _freq(False))
+selected_word: str | None = None
 
 if has_compounds:
     tab_orig, tab_parts = st.tabs(["元の語（複合語は1語のまま）", "複合語を構成要素に分けた場合"])
     with tab_orig:
-        render_table(freq_df, "orig")
+        selected_word = render_table(freq_df, "orig")
     with tab_parts:
         st.caption(
             "複合語を構成要素に置き換えて数え直した表です。どちらを採用するかは研究目的で決めてください。"
@@ -118,7 +126,22 @@ if has_compounds:
             tbl = comp.groupby(["surface", "compound_parts"]).size().rename("出現回数").reset_index().sort_values("出現回数", ascending=False)
             st.dataframe(tbl.rename(columns={"surface": "元の語", "compound_parts": "構成要素"}), width="stretch", hide_index=True)
 else:
-    render_table(freq_df, "orig")
+    selected_word = render_table(freq_df, "orig")
+
+# --- 選択した語の読み方（解説） --------------------------------------------------
+if selected_word:
+    r = freq_df.set_index("word").loc[selected_word]
+    row_flags = list(dp_flags) + check_low_frequency(str(r["label"]), int(r["freq"]), th)
+    if not dp_flags:
+        row_flags += check_dispersion(str(r["label"]), int(r["freq"]), float(r["dp"]), th)
+    inp = ExplainInput(
+        screen="frequency",
+        metrics={"freq": int(r["freq"]), "pmw": float(r["pmw"]), "dp": float(r["dp"]), "n_parts": n_parts, "n_total": corpus.n_tokens},
+        flags=row_flags, words={"WORD": str(r["label"])},
+    )
+    explanation_panel(inp, th, title=f"『{r['label']}』の読み方")
+else:
+    st.caption("表の行を選ぶと、その語の読み方（解説）が出ます。")
 
 # --- 偏りの警告と、該当文書の確認 ------------------------------------------------
 st.markdown("### 一部に偏っている語")
@@ -140,9 +163,11 @@ else:
         if len(skewed) > 10:
             st.caption(f"上位10語のみ表示。残り {len(skewed) - 10} 語は表の「注意」列で確認できます。")
 
+pick_options = [""] + freq_df["word"].tolist()
 pick = st.selectbox(
     "どこに出ているか確認する語（集計キー）",
-    options=[""] + freq_df["word"].tolist(),
+    options=pick_options,
+    index=pick_options.index(selected_word) if selected_word in pick_options else 0,
     format_func=lambda w: "（選んでください）" if w == "" else w,
 )
 if pick:
