@@ -1,8 +1,7 @@
 """公開デモ版（Streamlit Community Cloud）向けの切り替え。
 
-環境変数 DEMO_MODE=true のときだけ有効。ローカル実行（既定）では何も変わらない。
-Community Cloud では Secrets に書いた値が環境変数としても渡されるので、
-Secrets に DEMO_MODE = "true" と書けばよい。
+環境変数（または Secrets）DEMO_MODE=true のとき、あるいは *.streamlit.app から配信されているときに有効。
+ローカル実行（既定）では何も変わらない。DEMO_MODE=false を明示すれば公開環境でも無効にできる。
 サンプルデータは samples/demo/ に同梱する（デモ版で外部からの取得は行わない）。
 
 公開版はアップロードしたファイルがサーバーを経由するため、
@@ -30,8 +29,23 @@ def _env(name: str, default: str = "") -> str:
     return str(v) if v is not None else default
 
 
+def _served_from_streamlit_cloud() -> bool:
+    """Streamlit Community Cloud（*.streamlit.app）から配信されているか。
+    Secrets の設定漏れがあっても、公開環境では必ずデモ版の挙動になるようにする保険。"""
+    try:
+        host = str(st.context.headers.get("host", "")).lower()
+    except Exception:  # noqa: BLE001 - ヘッドレス実行など、リクエストが無い環境
+        return False
+    return host.endswith(".streamlit.app") or host.endswith(".streamlitapp.com")
+
+
 def is_demo() -> bool:
-    return _env("DEMO_MODE", "false").strip().lower() in ("1", "true", "yes", "on")
+    v = _env("DEMO_MODE", "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return _served_from_streamlit_cloud()
 
 
 def repo_url() -> str:

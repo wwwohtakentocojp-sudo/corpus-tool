@@ -17,7 +17,7 @@
 
 ## 試してみる（デモ版）
 
-デモ版: **https://＜デプロイ後に URL を記入＞**
+デモ版: **https://corpus-tool-demo.streamlit.app/**
 
 同梱サンプル（青空文庫の日本語作品、Project Gutenberg の英語作品、Leipzig Corpora Collection のドイツ語ニュース文。
 出典とライセンスは `samples/README.md`）で、読み込みから基本統計・頻度分析・KWIC・コロケーション・特徴語抽出までの
@@ -188,7 +188,7 @@ uv run streamlit run app.py --server.address localhost
 
   | 変数 | 意味 | 既定 |
   |---|---|---|
-  | `DEMO_MODE` | `true` でデモ版（バナー表示、アップロード上限、sm モデル固定、サンプル自動取得） | `false` |
+  | `DEMO_MODE` | `true` でデモ版（バナー表示、アップロード上限、sm モデル固定）。未設定でも `*.streamlit.app` から配信されていれば自動でデモ版になる。`false` で明示的に無効化 | 未設定 |
   | `DEMO_MAX_UPLOAD_MB` | デモ版のアップロード上限（MB） | `5` |
   | `REPO_URL` | サイドバーに出す GitHub リポジトリの URL | プレースホルダ |
 

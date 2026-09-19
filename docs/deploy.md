@@ -101,21 +101,11 @@ push 後、GitHub のページで `samples/demo/` と `requirements.txt` が含�
 
 ## 4. README にデモ版の URL を書く
 
-発行された URL（`https://<サブドメイン>.streamlit.app`）を README の「デモ版:」の行に記入し、
-`ui/demo.py` の `DEFAULT_REPO_URL` も自分のリポジトリに置き換えて commit・push します。
-Community Cloud は push を検知して自動で再デプロイします。
+発行された URL（https://corpus-tool-demo.streamlit.app/）は README の「デモ版:」の行に記入済みです。
+URL を変えた場合は README を直して commit・push します。Community Cloud は push を検知して自動で再デプロイします。
 
-```bash
-git add README.md ui/demo.py
-```
-
-```bash
-git commit -m "README: デモ版の URL を記入"
-```
-
-```bash
-git push
-```
+補足: デモ版の判定は Secrets の `DEMO_MODE` に加えて、配信元が `*.streamlit.app` なら自動で有効になります。
+Secrets の設定が漏れていても公開環境でローカル版の文言が出ることはありません。
 
 ## 5. 運用上の注意
 
