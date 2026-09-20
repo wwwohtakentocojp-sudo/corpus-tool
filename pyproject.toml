@@ -25,6 +25,8 @@ dependencies = [
     "compound-split>=1.0",
     # CSV / Excel 読み込み
     "openpyxl>=3.1",
+    # PDF（論文など）の文字取り出し
+    "pypdf>=5.0",
     # 共起ネットワーク
     "networkx>=3.2",
     "pyvis>=0.3.2",

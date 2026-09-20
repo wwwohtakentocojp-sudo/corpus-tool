@@ -17,6 +17,7 @@ from corpus.loaders import (
     guess_text_column,
     read_folder_txt,
     read_table,
+    read_text_file_bytes,
     read_txt_bytes,
     read_zip_txt,
     table_to_documents,
@@ -38,13 +39,16 @@ cfg = state.config()
 docs: list[Document] = []
 source_label = ""
 
-tab_txt, tab_table, tab_sample = st.tabs(["テキストファイル（.txt / zip / フォルダ）", "CSV / Excel（1行 = 1文書）", "サンプルデータで試す"])
+tab_txt, tab_table, tab_sample = st.tabs(["テキスト / PDF（.txt / .pdf / zip / フォルダ）", "CSV / Excel（1行 = 1文書）", "サンプルデータで試す"])
 
 # ---------------------------------------------------------------------------
 with tab_txt:
-    st.markdown("1ファイルが1文書として扱われます。zip の中の .txt もまとめて読み込みます。")
-    uploaded = st.file_uploader("ファイルを選ぶ（複数可）", type=["txt", "zip"], accept_multiple_files=True)
-    folder = st.text_input("または、フォルダのパスを入力（例: C:\\data\\interviews）", value=st.session_state.get("folder_path", ""))
+    st.markdown(
+        "1ファイルが1文書として扱われます。zip の中の .txt / .pdf もまとめて読み込みます。"
+        " PDF は文字を取り出して使います（論文の行末で切れた単語はつなぎ、ページ番号の行は除きます）。"
+    )
+    uploaded = st.file_uploader("ファイルを選ぶ（複数可）", type=["txt", "pdf", "zip"], accept_multiple_files=True)
+    folder = st.text_input("または、フォルダのパスを入力（例: C:\\data\\interviews。中の .txt / .pdf を読みます）", value=st.session_state.get("folder_path", ""))
     if folder != st.session_state.get("folder_path", ""):
         st.session_state["folder_path"] = folder
     decoded: list[tuple[str, str, str]] = []
@@ -56,8 +60,25 @@ with tab_txt:
                 decoded.extend(read_zip_txt(f.getvalue()))
             except Exception:  # noqa: BLE001
                 st.error(f"{f.name} を zip として開けませんでした。zip 形式か確認してください。")
+        elif f.name.lower().endswith(".pdf"):
+            try:
+                decoded.append(read_text_file_bytes(f.name, f.getvalue()))
+            except Exception:  # noqa: BLE001
+                st.error(f"{f.name} を PDF として開けませんでした。パスワード付きや壊れたファイルの可能性があります。")
         else:
             decoded.append(read_txt_bytes(f.name, f.getvalue()))
+    empty_pdfs = [n for n, t, e in decoded if e.startswith("PDF") and len(t.strip()) < 50]
+    if empty_pdfs:
+        st.warning(
+            "次の PDF からは文字がほとんど取り出せませんでした: " + "、".join(empty_pdfs) + "。"
+            " スキャン画像だけの PDF（文字情報のない PDF）の可能性があります。その場合は OCR ソフトで文字にしてから .txt で読み込んでください。"
+        )
+    pdf_loaded = [n for n, t, e in decoded if e.startswith("PDF") and len(t.strip()) >= 50]
+    if pdf_loaded:
+        st.info(
+            "PDF の文字取り出しは完全ではありません。2段組の論文では左右の段が入り混じることがあり、"
+            " ヘッダ・脚注・参考文献も本文と一緒に数えられます。重要な語は「5. 用例検索（KWIC）」で実際の文脈を確認してください。"
+        )
     if folder.strip():
         try:
             decoded.extend(read_folder_txt(folder.strip()))
@@ -65,8 +86,8 @@ with tab_txt:
             st.error("そのフォルダが見つかりません。パスを確認してください。")
     if decoded:
         docs = [Document(doc_id=i, name=n, text=t, meta={"encoding": e}) for i, (n, t, e) in enumerate(decoded)]
-        source_label = "テキストファイル"
-        st.dataframe([{"ファイル": n, "文字数": len(t), "文字コード": e} for n, t, e in decoded], width="stretch", hide_index=True)
+        source_label = "テキスト / PDF"
+        st.dataframe([{"ファイル": n, "文字数": len(t), "文字コード / 種別": e} for n, t, e in decoded], width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
 with tab_table:
