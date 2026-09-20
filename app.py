@@ -13,7 +13,8 @@ st.set_page_config(page_title="コーパス分析ツール", page_icon="📚", l
 glossary.load_glossary()
 
 pages = [
-    st.Page("views/p1_load.py", title="1. データを読み込む", icon="📂", default=True),
+    st.Page("views/p0_guide.py", title="使い方・できること", icon="📖", default=True),
+    st.Page("views/p1_load.py", title="1. データを読み込む", icon="📂"),
     st.Page("views/p2_preprocess.py", title="2. 前処理の設定", icon="⚙️"),
     st.Page("views/p3_basic_stats.py", title="3. 基本統計", icon="📊"),
     st.Page("views/p4_frequency.py", title="4. 頻度分析", icon="🔢"),
